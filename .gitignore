@@ -1,0 +1,4 @@
+*.gz
+data/
+.venv/
+.DS_Store
