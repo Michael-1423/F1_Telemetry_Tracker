@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pit Wall</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap">
+<style>
+/* Modelled on formula1.com: white page, navy top bar, quiet grey cards, upright bold type, red used sparingly. */
+:root{
+  color-scheme:light;
+  --page:#ffffff; --card:#f4f4f6; --card-2:#eaeaee; --line:#e0e0e6; --line-2:#d2d2da;
+  --ink:#15151e; --ink-2:#44444f; --muted:#6c6c78; --dim:#9a9aa5;
+  --nav:#15151e; --nav-2:#2a2a36; --nav-ink:#ffffff; --nav-muted:#b9b9c6;
+  --red:#e10600;
+  --purple:#8b2fd6; --green:#008c4a; --yellow:#b07c00; --amber:#c25e00; --blue:#1f5fd1; --ers:#00a887;
+  --soft:#e8002d; --medium:#f2c200; --hard:#b7b7bf; --inter:#39b54a; --wet:#0067ad;
+  --r:12px; --r-sm:8px;
+  --font:"Titillium Web","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);font:15px/1.45 var(--font);padding-inline:24px;padding-block:0 56px}
+@media (max-width:640px){body{padding-inline:16px}}
+button{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+.up{text-transform:uppercase;letter-spacing:.06em}
+.muted{color:var(--muted)}
+h1,h2,h3{margin:0;font-weight:700;line-height:1.15;letter-spacing:-.005em;text-wrap:balance}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
+/* ---------------- top bar (full-bleed navy, like the F1 site header) ---------------- */
+header.bar{position:sticky;top:0;z-index:20;margin-inline:-24px;padding:10px 24px;background:var(--nav);color:var(--nav-ink);
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px 24px}
+@media (max-width:640px){header.bar{margin-inline:-16px;padding-inline:16px}}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;letter-spacing:.01em;white-space:nowrap}
+.logo::before{content:"";width:22px;height:14px;background:var(--red);border-radius:2px;clip-path:polygon(0 100%,35% 0,100% 0,65% 100%)}
+.logo span{color:var(--nav-muted);font-weight:400}
+.race{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-width:0}
+.race .trk{font-weight:700;font-size:16px}
+.race .typ{color:var(--nav-muted);font-size:13px}
+.lapbox{display:flex;align-items:baseline;gap:6px;background:var(--nav-2);padding:3px 12px;border-radius:999px}
+.lapbox .l{font-size:12px;color:var(--nav-muted)}
+.lapbox b{font-size:17px;font-weight:700}
+.lapbox i{font-style:normal;color:var(--nav-muted)}
+.flagmsg{padding:2px 12px;font-weight:700;font-size:13px;color:#15151e;background:#ffd400;border-radius:999px}
+.flagmsg.fin{background:repeating-conic-gradient(#fff 0 25%,#15151e 0 50%) 0 0/10px 10px;color:transparent;width:30px;height:20px;padding:0;border-radius:4px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--nav-muted);white-space:nowrap}
+.spacer{flex:1}
+.actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}
+@media (max-width:900px){header.bar{grid-template-columns:1fr}.actions{justify-content:flex-start}}
+.rec{display:inline-flex;align-items:center;gap:7px;font-weight:600;font-size:13px;color:var(--nav-muted)}
+.rec::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.rec.on{color:var(--nav-ink)}
+.rec.on::before{background:var(--red)}
+.btn{border:1px solid var(--line-2);background:var(--page);color:var(--ink);padding:6px 14px;cursor:pointer;font-weight:600;font-size:14px;border-radius:var(--r-sm);white-space:nowrap}
+.btn:hover{border-color:var(--ink)}
+header .btn{background:transparent;color:var(--nav-ink);border-color:#4a4a58}
+header .btn:hover{border-color:var(--nav-ink)}
+.btn.red,header .btn.red{background:var(--red);border-color:var(--red);color:#fff}
+.btn.red:hover{background:#c40500;border-color:#c40500}
+.btn.small{font-size:13px;padding:3px 11px}
+.btn[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+kbd{font:600 11px var(--font);border:1px solid rgba(255,255,255,.5);border-radius:4px;padding:0 5px;margin-left:6px}
+
+/* connected games strip */
+.feeds{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding-block:10px;border-bottom:1px solid var(--line)}
+.feeds .chip{color:var(--muted)}
+.sources{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.src{font-size:13px;display:inline-flex;align-items:center;gap:7px;padding:2px 10px 2px 8px;background:var(--card);border-radius:999px;white-space:nowrap}
+.src::before{content:"";width:4px;height:14px;border-radius:2px;background:var(--c,#999)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:none}
+.dot.warn{background:var(--amber)}.dot.bad{background:var(--red)}
+
+/* banners */
+.banner{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 16px;background:#fff5e8;border-radius:var(--r);color:var(--ink)}
+.banner.fin{background:var(--card)}
+.banner b{font-weight:700}
+
+/* section headings */
+section.block{margin-top:36px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.detail>*,.two>*{min-width:0}
+.shead{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 16px}
+.shead h2{font-size:28px}
+.shead p{margin:0;color:var(--muted);font-size:14px;max-width:70ch}
+
+/* ---------------- live driver rows ---------------- */
+.live{display:grid;gap:8px}
+.lrow,.lhead{display:grid;grid-template-columns:56px minmax(170px,1.3fr) 120px 150px 110px 200px 110px 124px 100px}
+.lrow{align-items:stretch;background:var(--card);border-radius:var(--r);min-height:68px;overflow:hidden}
+.lhead{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.lhead div,.lrow>div{padding:10px 12px;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.lrow>div+div{border-left:1px solid var(--line)}
+.pos{font-weight:700;font-size:24px;align-items:center}
+.lrow.out{opacity:.55}
+.drv{position:relative;padding-left:22px!important}
+.drv::before{content:"";position:absolute;left:10px;top:14px;bottom:14px;width:4px;border-radius:2px;background:var(--tc)}
+.lrow .drv{border-left:0!important}
+.drv .n{font-size:18px;font-weight:700;line-height:1.15}
+.drv .t{font-size:13px;color:var(--muted)}
+.tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.tag{font-size:11.5px;font-weight:600;padding:0 8px;line-height:19px;border-radius:999px;background:var(--card-2);color:var(--ink-2);white-space:nowrap}
+.tag.red{background:#fde3e1;color:#b10400}.tag.amber{background:#fff0d6;color:#8a4a00}.tag.blue{background:#e2ebfc;color:#16459c}.tag.white{background:var(--ink);color:#fff}
+.big{font-size:21px;font-weight:700;line-height:1.05}
+.sub{font-size:12.5px;color:var(--muted)}
+.tyre{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#fff;border:4px solid var(--hard);font-weight:700;font-size:12px;flex:none;color:var(--ink)}
+.tyre.S{border-color:var(--soft)}.tyre.M{border-color:var(--medium)}.tyre.H{border-color:var(--hard)}.tyre.I{border-color:var(--inter)}.tyre.W{border-color:var(--wet)}
+.tyre.sm{width:20px;height:20px;border-width:3px;font-size:10px;vertical-align:middle}
+.tyrecell{flex-direction:row!important;align-items:center;justify-content:flex-start!important;gap:10px!important}
+.wear4{display:grid;grid-template-columns:1fr 1fr;gap:2px;font-size:11.5px;width:62px}
+.wear4 span{background:#fff;text-align:center;line-height:16px;border-radius:3px}
+.wearcell{flex-direction:row!important;align-items:center;justify-content:space-between!important;gap:8px!important}
+.mix{font-size:17px;font-weight:700}
+.mix.Rich,.mix.Max{color:var(--amber)}.mix.Lean{color:var(--ers)}
+.ers{display:grid;gap:5px}
+.battery{position:relative;height:6px;background:var(--card-2);border-radius:3px;overflow:hidden}
+.battery i{position:absolute;inset:0 auto 0 0;background:var(--ers);border-radius:3px}
+.ersline{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink-2)}
+.ersline b{font-size:18px;color:var(--ink)}
+.deploy{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.deploy::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--line-2)}
+.deploy.on{color:var(--ink);font-weight:600}
+.deploy.on::before{background:var(--ers);box-shadow:0 0 0 3px rgba(0,168,135,.2)}
+.t-purple{color:var(--purple)!important}.t-green{color:var(--green)!important}.t-yellow{color:var(--yellow)!important}.t-red{color:var(--red)!important}
+.inv{text-decoration:line-through;color:var(--muted)!important}
+.tl{flex-direction:row!important;align-items:center;justify-content:flex-start!important;gap:10px!important}
+.tl .big{font-size:24px}
+@media (max-width:1200px){
+  .lhead{display:none}
+  .lrow{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"pos drv drv drv" "tyre wear mix ers" "last best tl tl"}
+  .lrow>div{border-left:0!important;border-top:1px solid var(--line)}
+  .lrow>div:nth-child(1){grid-area:pos;border-top:0}.lrow>div:nth-child(2){grid-area:drv;border-top:0}.lrow>div:nth-child(3){grid-area:tyre}
+  .lrow>div:nth-child(4){grid-area:wear}.lrow>div:nth-child(5){grid-area:mix}.lrow>div:nth-child(6){grid-area:ers}
+  .lrow>div:nth-child(7){grid-area:last}.lrow>div:nth-child(8){grid-area:best}.lrow>div:nth-child(9){grid-area:tl}
+  .lrow>div[data-l]::before{content:attr(data-l);font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+  .tyrecell,.wearcell,.tl{flex-wrap:wrap}
+}
+@media (max-width:620px){
+  .lrow{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"pos drv" "tyre wear" "mix ers" "last best" "tl tl"}
+}
+
+/* ---------------- panels, feed & incidents ---------------- */
+section.block.two{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){section.block.two{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--card);border-radius:var(--r);overflow:hidden}
+.phead{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.phead h3{font-size:18px}
+.filters{display:flex;flex-wrap:wrap;gap:4px;margin-left:auto}
+.feed{max-height:520px;overflow-y:auto;background:var(--card)}
+.msg{display:grid;grid-template-columns:4px 78px 1fr;gap:12px;padding:10px 16px 10px 0;border-bottom:1px solid var(--line)}
+.msg .s{background:var(--line-2);border-radius:0 2px 2px 0}
+.msg.major .s{background:var(--red)}.msg.minor .s{background:var(--amber)}.msg.info .s{background:var(--blue)}.msg.race .s{background:#ffd400}
+.msg .k{font-size:12.5px;color:var(--muted);line-height:1.3}
+.msg .k b{display:block;color:var(--ink);font-weight:600;font-size:13px}
+.msg .w{font-weight:700;font-size:14px}
+.msg .x{font-size:14px;color:var(--ink-2)}
+.msg.race .x{color:var(--ink);font-weight:600}
+.incbtn{border:0;background:#fde3e1;color:#b10400;font:600 12px var(--font);padding:1px 9px;margin-left:8px;cursor:pointer;border-radius:999px}
+.inc{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)}
+.inc .id{font-size:18px;font-weight:700;color:var(--muted)}
+.inc .tt{font-weight:600}
+.saved{font-size:12.5px;font-weight:600;color:var(--green);display:inline-flex;align-items:center;gap:6px}
+.saved::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}
+
+/* ---------------- driver detail ---------------- */
+.tabs{display:flex;flex-wrap:wrap;gap:4px 22px;border-bottom:1px solid var(--line)}
+.tab{border:0;background:none;padding:8px 0 10px;cursor:pointer;font-weight:600;font-size:15px;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px;display:inline-flex;align-items:center;gap:8px}
+.teambar{width:4px;height:18px;border-radius:2px;background:var(--tc)}
+.ts td{vertical-align:middle}
+.tsdrv{position:relative;padding-left:22px!important;min-width:190px}
+.tsdrv::before{content:"";position:absolute;left:10px;top:10px;bottom:10px;width:4px;border-radius:2px;background:var(--tc)}
+.tsdrv b{font-size:16px}
+.live-line{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;margin-top:2px}
+.delta{font-weight:700}.delta.d-neg{color:var(--green)}.delta.d-pos{color:var(--red)}
+.ts td.now{white-space:normal;min-width:250px}
+.besttime{font-size:17px;font-weight:700}
+section.block.two.one{grid-template-columns:minmax(0,1fr)}
+.tab::before{content:"";width:4px;height:14px;border-radius:2px;background:var(--tc)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--red)}
+.tab:hover{color:var(--ink)}
+.detail{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:980px){.detail{grid-template-columns:minmax(0,1fr)}}
+.sgroup{padding:12px 16px;border-bottom:1px solid var(--line)}
+.sgroup:last-child{border-bottom:0}
+.sgroup h4{margin:0 0 6px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:14px;margin:0}
+.kv dt{color:var(--ink-2)}.kv dd{margin:0;font-weight:700;text-align:right}
+.note{font-size:13.5px;color:var(--ink-2);padding:10px 14px;background:#fff5e8;border-radius:var(--r-sm);margin:12px 16px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 12px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--card)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+tbody tr:last-child td{border-bottom:0}
+tr.pit td{background:#eef3fd!important}
+.vbar{display:inline-block;height:5px;border-radius:3px;background:var(--line-2);vertical-align:middle;margin-left:8px}
+.corner-h{text-align:right}
+.corner-h small{display:block;color:var(--dim);font-size:11px;letter-spacing:.02em;text-transform:none}
+.seg{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap;background:var(--card);padding:3px;border-radius:var(--r-sm)}
+.seg button{border:0;background:transparent;padding:5px 12px;cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-2);border-radius:6px}
+.seg button[aria-pressed="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(21,21,30,.12)}
+.dev{font-size:11.5px;color:var(--muted);margin-left:4px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--muted);padding:10px 16px}
+.legend b{font-weight:700}
+
+/* ---------------- empty / dialog / toast ---------------- */
+.empty{padding:56px 0;display:grid;gap:14px;justify-items:start;max-width:760px}
+.empty h2{font-size:36px}
+.empty ol{color:var(--ink-2);line-height:1.7;margin:0;padding-left:20px}
+.hidden{display:none!important}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;font-weight:600;z-index:60;border-radius:var(--r-sm)}
+dialog{border:0;background:var(--page);color:var(--ink);width:min(980px,94vw);max-height:88vh;padding:0;border-radius:var(--r);box-shadow:0 20px 60px rgba(21,21,30,.3)}
+dialog::backdrop{background:rgba(21,21,30,.45)}
+dialog .dh{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid var(--line)}
+dialog pre{margin:0;padding:18px;white-space:pre-wrap;font:12.5px/1.55 ui-monospace,Consolas,monospace;max-height:70vh;overflow:auto;color:var(--ink-2);background:var(--card)}
+.log{font:11px ui-monospace,Consolas,monospace;color:var(--dim);padding-top:22px}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="logo">Pit Wall <span>F1 2020</span></div>
+  <div class="race" id="raceInfo"><span class="muted up">Waiting for telemetry</span></div>
+  <div class="actions">
+    <span class="rec" id="rec">IDLE</span>
+    <button class="btn" id="viewBtn" type="button">Sessions</button>
+    <button class="btn red" id="flagBtn" type="button" title="Save the last 20 s and the next 10 s as an incident">Flag incident<kbd>F</kbd></button>
+  </div>
+</header>
+<div class="feeds"><span class="chip">Telemetry from</span><div class="sources" id="sources"><span class="sub">No games connected yet</span></div></div>
+<div id="banners"></div>
+
+<main id="liveView">
+  <div class="empty hidden" id="emptyState">
+    <h2>Waiting for telemetry</h2>
+    <p class="muted" id="emptyAddr">Listening on UDP port 20777.</p>
+    <ol>
+      <li>In F1 2020: <b>Game Options → Settings → Telemetry Settings</b>.</li>
+      <li><b>UDP Telemetry</b> On · <b>UDP IP Address</b> = this computer's IP (Tailscale IP for remote drivers) · <b>Port</b> 20777 · <b>Send Rate</b> 20 Hz · <b>Format</b> 2020.</li>
+      <li><b>Your Telemetry: Public</b>, so tyre wear, fuel, ERS and damage are visible to the pit wall.</li>
+    </ol>
+  </div>
+
+  <div id="liveContent">
+    <section class="block hidden" id="tsSection">
+      <div class="shead"><h2>Timesheet</h2><p>Each human driver's fastest valid lap and what went into it: tyre, ERS, fuel, traffic and corners cut. The last columns show what they're doing right now.</p></div>
+      <div class="panel scroll" id="timesheet"></div>
+      <div class="legend" style="padding:0"><span><b class="t-purple">Purple</b> fastest of the session</span><span><b>Fuel</b> at the start of the fastest lap / when leaving the pits for that run</span><span><b>Traffic</b> share of the lap within 1 s behind another car</span><span><b>Cuts</b> excursions over the inside of a corner (2+ wheels beyond the kerb); the game's lenient setting ignores most</span></div>
+    </section>
+
+    <section class="block" id="raceSection">
+      <div class="shead"><h2>Drivers</h2><p>Live car data for every human driver: what the in-game timing doesn't show.</p></div>
+      <div class="lhead" aria-hidden="true"><div>Pos</div><div>Driver</div><div>Tyre</div><div>Avg wear</div><div>Fuel mix</div><div>ERS</div><div>Last lap</div><div>Fastest lap</div><div title="All four wheels beyond the kerbs">4 wheels off</div></div>
+      <div class="live" id="live"></div>
+    </section>
+
+    <section class="block two" id="feedSection">
+      <div class="panel">
+        <div class="phead"><h3>Race control</h3><div class="filters" id="feedFilters"></div></div>
+        <div class="feed" id="feed"></div>
+      </div>
+      <div class="panel" id="incPanel">
+        <div class="phead"><h3>Incidents</h3><span class="saved">Auto-saved for analysis</span></div>
+        <div id="incidents"></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="shead"><h2>Driver profile</h2><p>Setup and average corner behaviour. Averages use clean laps: no pit stop, no incident, no safety car, not lap 1.</p></div>
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div class="detail" id="detail"></div>
+    </section>
+
+    <section class="block">
+      <div class="shead"><h2>Lap by lap</h2><p id="lblNote">Every completed lap for the selected driver.</p>
+        <div class="seg" id="metricSeg" role="group" aria-label="Corner metric"></div></div>
+      <div class="panel scroll" id="laps"></div>
+    </section>
+    <div class="log" id="log"></div>
+  </div>
+</main>
+
+<main id="sessionsView" class="hidden">
+  <section class="block">
+    <div class="shead"><h2>Sessions</h2><p id="diskInfo"></p></div>
+    <div class="panel scroll"><table>
+      <thead><tr><th>When</th><th>Session</th><th>Drivers</th><th class="n">Incidents</th><th class="n">Raw data</th><th>Raw retention</th><th class="n">Total</th><th></th></tr></thead>
+      <tbody id="sessRows"></tbody></table></div>
+  </section>
+  <section class="block" id="sessDetail"></section>
+</main>
+
+<dialog id="dlg">
+  <div class="dh"><h3 id="dlgTitle" style="font-size:20px">Incident</h3><span class="spacer"></span>
+    <button class="btn small red" id="dlgCopy" type="button">Copy prompt</button>
+    <a class="btn small" id="dlgData" href="#" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">Data</a>
+    <button class="btn small" id="dlgClose" type="button">Close</button></div>
+  <pre id="dlgBody"></pre>
+</dialog>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ft=s=>{if(s==null||s<=0)return '–';const m=Math.floor(s/60);const r=(s-60*m).toFixed(3);return m?`${m}:${r.padStart(6,'0')}`:r;};
+const mb=n=>n>=1e9?(n/1e9).toFixed(2)+' GB':(n/1e6).toFixed(1)+' MB';
+const letter=t=>{t=String(t||'');for(const[k,v]of [['Super soft','S'],['Soft','S'],['Medium','M'],['Hard','H'],['Inter','I'],['Wet','W']])if(t.startsWith(k))return v;return '?';};
+const tyre=(t,sm)=>`<span class="tyre ${letter(t)}${sm?' sm':''}" title="${esc(t)}">${letter(t)}</span>`;
+let S=null,D=null,detailVersion=-1,sel=null,metric='min_v',feedFilter='drivers',lastFeed='',canControl=true;
+try{sel=+localStorage.getItem('pw.sel')||null;metric=localStorage.getItem('pw.metric')||'min_v';feedFilter=localStorage.getItem('pw.feed2')||'drivers';}catch(e){}
+
+function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),3200);}
+async function post(u,b){try{const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});const j=await r.json();if(!r.ok){toast(j.error||'Request failed');return null;}return j;}catch(e){toast('Could not reach the tracker');return null;}}
+
+/* ================= live ================= */
+function render(){
+  if(!S)return;
+  const s=S.session,a=S.app||{};
+  $('emptyState').classList.toggle('hidden',!!s);$('liveContent').classList.toggle('hidden',!s);
+  $('emptyAddr').textContent=`Listening on UDP port ${a.udp_port||20777}.${a.packets?' '+a.packets.toLocaleString()+' packets received.':''}`;
+  if(s){
+    const lap=s.is_race?`<div class="lapbox"><span class="l">LAP</span><b class="num">${Math.min(s.lap,s.total_laps)||'–'}</b><i>/ ${s.total_laps}</i></div>`:
+      (s.time_left!=null?`<div class="lapbox"><span class="l">LEFT</span><b class="num">${Math.floor(s.time_left/60)}:${String(s.time_left%60).padStart(2,'0')}</b></div>`:'');
+    $('raceInfo').innerHTML=`<div><div class="trk">${esc(s.track)}</div><div class="typ">${esc(s.type)}${s.clock?' · '+esc(s.clock):''}</div></div>${lap}
+      ${s.sc?`<span class="flagmsg">${esc(s.sc)}</span>`:''}${s.chequered?'<span class="flagmsg fin" title="Chequered flag">.</span>':''}
+      ${s.paused?'<span class="chip">Paused</span>':''}<span class="chip">${esc(s.weather)} · Track ${s.track_temp??'–'}° · Air ${s.air_temp??'–'}°</span>`;
+  }
+  const stale=a.last_packet_age!=null&&a.last_packet_age>3;
+  const teamOf=n=>((S.live||[]).find(d=>d.name===n)||{}).color||'#888';
+  $('sources').innerHTML=(S.sources||[]).length?'':'<span class="sub">No games connected yet</span>';
+  if((S.sources||[]).length)$('sources').innerHTML=(S.sources||[]).map(x=>`<span class="src" style="--c:${teamOf(x.name)}" title="${esc(x.key)} · ${x.packets.toLocaleString()} packets${x.primary?' · primary':''}"><span class="dot ${x.age>5?'bad':x.age>2?'warn':''}"></span>${esc(x.name)}${x.car==null||x.name==='spectator'?'':''}</span>`).join('');
+  const rec=$('rec');
+  if(a.recording_raw){rec.className='rec on';rec.textContent=`REC ${mb(a.raw_bytes)}${a.keep_current_raw?' · KEPT':''}`;}
+  else{rec.className='rec';rec.textContent=stale&&s?`NO DATA ${Math.round(a.last_packet_age)}S`:(a.mode==='replay'?'REPLAY':'IDLE');}
+  const b=[],pend=(S.retention&&S.retention.pending)||[];
+  if(pend.length){const tot=pend.reduce((x,p)=>x+p.raw_bytes,0);b.push(`<div class="banner"><b>Earlier raw data (${mb(tot)}) deletes in ${Math.min(...pend.map(p=>p.delete_in_s))}s</b><span class="muted">Summaries and incidents are always kept.</span><span class="spacer"></span><button class="btn small" type="button" data-act="keepPending">Keep it</button></div>`);}
+  if(s&&s.ended&&s.id)b.push(`<div class="banner fin"><b>Session complete</b><span class="muted">Summary saved.</span><span class="spacer"></span><button class="btn small" type="button" data-act="openSummary" data-id="${esc(s.id)}">View summary</button></div>`);
+  if(s&&stale&&!s.ended)b.push(`<div class="banner"><b>No telemetry for ${Math.round(a.last_packet_age)}s</b><span class="muted">Paused, in the menus, or the connection dropped.</span></div>`);
+  $('banners').innerHTML=b.join('');
+  if(!s)return;
+  const race=s.kind==='race';
+  $('raceSection').classList.toggle('hidden',!race);$('tsSection').classList.toggle('hidden',race);
+  const showInc=race||(S.incidents||[]).length>0;
+  $('incPanel').classList.toggle('hidden',!showInc);$('feedSection').classList.toggle('one',!showInc);
+  if(race)renderLive();else renderTimesheet();
+  renderFeed();if(showInc)renderIncidents();
+  if(a.detail_version!==detailVersion){detailVersion=a.detail_version;fetch('/api/detail').then(r=>r.json()).then(j=>{D=j;renderDetail(LIVE_T);}).catch(()=>{});}
+  $('log').innerHTML=(a.log||[]).map(esc).join('<br>');
+}
+
+function renderLive(){
+  const rows=S.live||[];
+  $('live').innerHTML=rows.map(d=>{
+    const out=['retired','disqualified','not classified','did not finish'].includes(d.state);
+    const tags=[];
+    if(d.pit)tags.push('<span class="tag blue">Pit</span>');
+    if(d.state&&d.state!=='pit')tags.push(`<span class="tag ${out?'red':'white'}">${esc(d.state)}</span>`);
+    if(d.penalties)tags.push(`<span class="tag red">+${d.penalties}s</span>`);
+    if(d.warnings)tags.push(`<span class="tag amber">${d.warnings} warn</span>`);
+    const wing=Math.max(d.dmg.fl||0,d.dmg.fr||0,d.dmg.rw||0);if(wing>=10)tags.push(`<span class="tag red">Wing ${wing}%</span>`);
+    if(d.invalid)tags.push('<span class="tag">Lap invalid</span>');
+    const gap=d.pos===1?'Leader':d.laps_down?`+${d.laps_down} lap`:d.gap!=null?`+${d.gap.toFixed(1)}s`:'';
+    const w=d.wear||[];const wc=v=>v>=60?'t-red':v>=40?'t-yellow':'';
+    return `<div class="lrow${out?' out':''}">
+      <div class="pos num">${d.pos||'–'}</div>
+      <div class="drv" style="--tc:${d.color}"><span class="n">${esc(d.name)}</span><span class="t">${esc(d.team)}${gap?' · '+gap:''}${d.own?'':' · via other game'}</span>${tags.length?`<span class="tags">${tags.join('')}</span>`:''}</div>
+      <div class="tyrecell" data-l="Tyre">${tyre(d.tyre)}<div><div style="font-weight:700">${esc(String(d.tyre).split(' (')[0])}</div><div class="sub">${d.tyre_age==null?'–':d.tyre_age===1?'1 lap old':d.tyre_age+' laps old'}</div></div></div>
+      <div class="wearcell" data-l="Avg wear"><span class="big num ${wc(d.wear_avg)}">${d.wear_avg??'–'}<span style="font-size:14px">%</span></span>
+        ${w.length?`<div class="wear4 num" title="Front-left, front-right / rear-left, rear-right"><span class="${wc(w[0])}">${w[0]}</span><span class="${wc(w[1])}">${w[1]}</span><span class="${wc(w[2])}">${w[2]}</span><span class="${wc(w[3])}">${w[3]}</span></div>`:''}</div>
+      <div data-l="Fuel mix"><span class="mix ${esc(d.mix)}">${esc(d.mix||'–')}</span><span class="sub num">${d.fuel_kg} kg · ${d.fuel_surplus>=0?'+':''}${d.fuel_surplus} laps</span></div>
+      <div class="ers" data-l="ERS"><div class="ersline"><b class="num">${Math.round(d.ers_pct)}%</b><span class="deploy${d.deploying?' on':''}">${d.deploying?'Deploying':'Harvesting'}</span></div>
+        <div class="battery" title="Energy store ${d.ers_pct}%"><i style="width:${Math.min(100,d.ers_pct)}%"></i></div>
+        <span class="sub num">${esc(d.ers_mode||'')} mode · ${d.ers_lap_mj} / 4 MJ this lap</span></div>
+      <div data-l="Last lap"><span class="big num ${d.last_valid?'':'inv'}">${ft(d.last)}</span><span class="sub num">current ${ft(d.now)}</span></div>
+      <div data-l="Fastest lap"><span class="big num ${d.fastest?'t-purple':d.best?'t-green':''}">${ft(d.best)}</span><span class="sub">${d.best_lap?'lap '+d.best_lap:''}${d.fastest?' · fastest overall':''}</span></div>
+      <div class="tl" data-l="4 wheels off"><span class="big num ${d.track_limits>=10?'t-yellow':''}">${d.track_limits}</span><span class="sub">${d.track_limits_lap?`+${d.track_limits_lap} this lap`:'this race'}</span></div>
+    </div>`;}).join('')||'<p class="muted">No human drivers detected yet.</p>';
+}
+
+function renderTimesheet(){
+  const rows=S.timesheet||[];
+  const minOf=k=>Math.min(...rows.map(r=>r[k]||1e9));
+  const bs={s1:minOf('s1'),s2:minOf('s2'),s3:minOf('s3')};
+  const sec=(r,k)=>`<td class="n ${r[k]&&r[k]===bs[k]?'t-purple':''}">${r[k]?r[k].toFixed(3):'–'}</td>`;
+  const status=r=>{
+    const st=r.pit?'In pits':r.status==='garage'?'Garage':r.status?r.status[0].toUpperCase()+r.status.slice(1):'';
+    const parts=[`<span class="tag ${r.status==='flying lap'?'blue':''}">${esc(st)}</span>`];
+    if(!r.pit&&r.status!=='garage'&&r.now)parts.push(`<span class="num">${ft(r.now)}</span>`);
+    if(r.delta!=null&&!r.pit)parts.push(`<span class="delta num ${r.delta<0?'d-neg':'d-pos'}">${r.delta<0?'−':'+'}${Math.abs(r.delta).toFixed(3)}</span>`);
+    if(r.invalid)parts.push('<span class="tag">Invalid</span>');
+    if(r.traffic_now!=null&&r.traffic_now<1.5&&!r.pit)parts.push(`<span class="tag amber">Traffic ${r.traffic_now.toFixed(1)}s</span>`);
+    return parts.join('');};
+  $('timesheet').innerHTML=`<table class="ts"><thead><tr><th class="n">Pos</th><th>Driver</th><th class="n">Fastest lap</th><th class="n">Gap</th><th class="n">S1</th><th class="n">S2</th><th class="n">S3</th>
+    <th>Tyre</th><th class="n">ERS used</th><th>Mix</th><th class="n">Fuel</th><th class="n">Traffic</th><th class="n">Cuts</th><th class="n">4 wheels off</th><th class="n">Laps</th><th class="n">Top km/h</th><th>Now</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td class="n" style="font-weight:700;font-size:16px">${r.pos??'–'}</td>
+      <td class="tsdrv" style="--tc:${r.color}"><b>${esc(r.name)}</b><div class="sub">${esc(r.team)}${r.own?'':' · via other game'}</div></td>
+      <td class="n"><span class="besttime num ${r.pos===1?'t-purple':''}">${ft(r.best)}</span><div class="sub">${r.best_lap?'lap '+r.best_lap:'no valid lap'}</div></td>
+      <td class="n">${r.pos===1?'':r.gap!=null?'+'+r.gap.toFixed(3):'–'}</td>${sec(r,'s1')}${sec(r,'s2')}${sec(r,'s3')}
+      <td>${tyre(r.tyre,true)} ${esc(String(r.tyre||'').split(' (')[0])} <span class="muted num">${r.tyre_age??''}</span></td>
+      <td class="n">${r.ers_mj!=null?r.ers_mj+' MJ':'–'}<div class="sub">${r.ers_pct!=null?r.ers_pct+'% of lap':''}</div></td>
+      <td>${esc(r.mix||'–')}</td>
+      <td class="n">${r.fuel_start!=null?r.fuel_start.toFixed(1)+' kg':'–'}<div class="sub">${r.fuel_out!=null?'out '+r.fuel_out.toFixed(1)+' kg':''}</div></td>
+      <td class="n ${r.traffic_pct>=10?'t-yellow':''}">${r.traffic_pct!=null?r.traffic_pct+'%':'–'}</td>
+      <td class="n ${r.cuts?'t-yellow':'muted'}">${r.cuts}<div class="sub">${r.cuts_best?r.cuts_best+' on best':r.game_cuts?r.game_cuts+' by game':''}</div></td>
+      <td class="n ${r.four_off?'':'muted'}">${r.four_off}</td>
+      <td class="n">${r.valid_laps}/${r.laps}<div class="sub">${r.runs} run${r.runs===1?'':'s'}</div></td>
+      <td class="n">${r.vmax??'–'}</td>
+      <td class="now"><div class="live-line">${status(r)}</div><div class="sub num">${esc(String(r.tyre_now||'').split(' (')[0])} · ${esc(r.mix_now||'')} · ${r.fuel_now} kg · ERS ${r.ers_now}%${r.deploying?' · deploying':''}</div></td></tr>`).join('')
+      ||'<tr><td colspan="17" class="muted">No human drivers on track yet.</td></tr>'}</tbody></table>`;
+}
+
+const FILTERS=[['drivers','Drivers'],['major','Major'],['limits','Track limits'],['race','Race control'],['pit','Pit'],['all','Everything']];
+function renderFeed(){
+  $('feedFilters').innerHTML=FILTERS.map(([k,l])=>`<button class="btn small" type="button" data-filter="${k}" aria-pressed="${feedFilter===k}">${l}</button>`).join('');
+  const ev=(S.events||[]).filter(e=>{
+    if(feedFilter==='all')return true;
+    if(feedFilter==='major')return e.severity==='major';
+    if(feedFilter==='limits')return e.kind==='track_limits'||e.kind==='lap_invalid';
+    if(feedFilter==='race')return e.kind==='race_control'||e.kind==='fastest_lap';
+    if(feedFilter==='pit')return e.kind==='pit';
+    return e.severity!=='ai'&&e.kind!=='track_limits'&&(e.humans.length||e.kind==='race_control');
+  }).sort((x,y)=>y.st-x.st||y.id-x.id);
+  const sig=feedFilter+ev.length+(ev[0]?ev[0].id+(ev[0].incident||''):'')+(S.incidents||[]).map(i=>i.status).join();
+  if(sig===lastFeed)return;lastFeed=sig;
+  $('feed').innerHTML=ev.slice(0,200).map(e=>`<div class="msg ${e.severity}"><span class="s"></span>
+    <div class="k num"><b>${esc(e.clock||'')}</b>Lap ${e.lap??''}${e.corner?' · '+esc(e.corner):''}</div>
+    <div>${e.names.length?`<div class="w">${esc(e.names.join(' / '))}</div>`:''}<div class="x">${esc(e.text)}${e.incident?`<button class="incbtn" type="button" data-inc="${esc(e.incident)}">Incident ${esc(e.incident)}</button>`:''}</div></div></div>`).join('')
+    ||'<div class="muted" style="padding:14px">Nothing yet.</div>';
+}
+
+function renderIncidents(){
+  const inc=(S.incidents||[]).slice().reverse();
+  const nameOf=i=>{const c=(S.cars||[]).find(x=>x.idx===i);return c?c.name:'#'+i;};
+  $('incidents').innerHTML=inc.map(i=>`<div class="inc"><span class="id num">${esc(i.id)}</span>
+    <div><div class="tt">${esc(i.title)}</div><div class="sub">Lap ${i.lap??'–'} · ${esc(i.clock||'')} · ${esc((i.cars||[]).map(nameOf).join(', '))}</div></div>
+    ${i.status==='saved'?`<button class="btn small" type="button" data-inc="${esc(i.id)}">Prompt</button>`:`<span class="tag amber">${esc(i.status)}</span>`}</div>`).join('')
+    ||'<div class="muted" style="padding:14px">Collisions, spins, heavy damage, penalties and retirements involving a human driver are saved here automatically, with 20 s of data before and 10 s after.</div>';
+}
+
+/* ================= driver detail ================= */
+const METRICS=[['min_v','Apex speed','km/h',1],['brake_at','Braking point','m',0],['entry_v','Entry speed','km/h',1],['throttle_at','Throttle on','m',0],['exit_v','Exit speed','km/h',1]];
+const LIVE_T={tabs:'tabs',detail:'detail',laps:'laps',seg:'metricSeg',note:'lblNote',data:()=>D};
+const PAST_T={tabs:'pTabs',detail:'pDetail',laps:'pLaps',seg:'pMetricSeg',note:'pLblNote',data:()=>PD};
+let PD=null;
+function renderAll(){renderDetail(LIVE_T);if(PD&&$('pTabs'))renderDetail(PAST_T);}
+function renderDetail(T){
+  T=T||LIVE_T;const D=T.data();
+  if(!D||!D.drivers||!$(T.tabs))return;
+  const ds=D.drivers;
+  if(!ds.length){$(T.tabs).innerHTML='';$(T.detail).innerHTML='<p class="muted">Driver profiles appear after the first lap.</p>';$(T.laps).innerHTML='';$(T.seg).innerHTML='';return;}
+  if(!ds.some(d=>d.idx===sel))sel=ds[0].idx;
+  $(T.tabs).innerHTML=ds.map(d=>`<button class="tab" role="tab" type="button" style="--tc:${d.color}" aria-selected="${d.idx===sel}" data-sel="${d.idx}">${esc(d.name)}</button>`).join('');
+  const d=ds.find(x=>x.idx===sel);
+  const bestApex={};ds.forEach(x=>(x.profile||[]).forEach(r=>{if(r.min_v!=null&&(bestApex[r.corner]==null||r.min_v>bestApex[r.corner]))bestApex[r.corner]=r.min_v;}));
+  const known=Object.entries(d.known||{}).filter(([k,v])=>v!=null);
+  const setup=d.setup?d.setup.filter(g=>g.rows.length).map(g=>`<div class="sgroup"><h4>${esc(g.title)}</h4><dl class="kv">${g.rows.map(r=>`<dt>${esc(r.label)}</dt><dd class="num">${esc(r.value)}${esc(r.unit)}</dd>`).join('')}</dl></div>`).join('')
+    :`<div class="note">${d.own?'No setup received from this driver\'s game yet. The game sends it every few seconds while driving; recordings made with the old capture script don\'t include it.':'This driver isn\'t streaming telemetry, and the game only shares a car\'s setup with its own driver. Below is what the other games reveal.'}</div>`;
+  const maxV=Math.max(...(d.profile||[]).map(r=>r.min_v||0),1);
+  const tlw=d.track_limits_where||{};
+  const prof=(d.profile||[]).map(r=>`<tr><td style="font-weight:700">${esc(r.corner)}</td>
+    <td class="n ${bestApex[r.corner]===r.min_v?'t-purple':''}">${r.min_v??'–'}<span class="vbar" style="width:${Math.round(60*(r.min_v||0)/maxV)}px"></span></td>
+    <td class="n">${r.best_min_v??'–'}</td><td class="n">${r.entry_v??'–'}</td>
+    <td class="n">${r.brake_at!=null?Math.round(r.brake_at)+' m':'<span class="muted">flat out</span>'}</td>
+    <td class="n muted">${r.brake_range?r.brake_range[0]+'–'+r.brake_range[1]:''}</td>
+    <td class="n">${r.gear??'–'}</td><td class="n">${r.throttle_at!=null?Math.round(r.throttle_at)+' m':'–'}</td><td class="n">${r.exit_v??'–'}</td>
+    <td class="n ${tlw[r.corner]?'t-yellow':'muted'}">${tlw[r.corner]||0}</td><td class="n ${(d.cuts_where||{})[r.corner]?'t-yellow':'muted'}">${(d.cuts_where||{})[r.corner]||0}</td></tr>`).join('');
+  const basis=(d.profile&&d.profile[0])?d.profile[0].basis:'';
+  $(T.detail).innerHTML=`<div class="panel"><div class="phead"><span class="teambar" style="--tc:${d.color}"></span><h3>Setup</h3><span class="sub">${esc(d.team)}</span></div>
+      ${setup}<div class="sgroup"><h4>From telemetry</h4><dl class="kv">${known.map(([k,v])=>`<dt>${esc(k)}</dt><dd class="num">${esc(v)}</dd>`).join('')}</dl></div></div>
+    <div class="panel"><div class="phead"><h3>Corners</h3><span class="sub">${D.zones_auto?'Corners detected automatically from the fastest lap · ':''}${basis?'Averages over '+esc(basis):''}</span></div>
+      <div class="scroll"><table><thead><tr><th>Corner</th><th class="n">Avg apex km/h</th><th class="n">Best</th><th class="n">Entry km/h</th><th class="n">Brakes at</th><th class="n">Range</th><th class="n">Gear</th><th class="n">Throttle on</th><th class="n">Exit km/h</th><th class="n">4 wheels off</th><th class="n">Cuts</th></tr></thead>
+      <tbody>${prof||'<tr><td colspan="11" class="muted">Needs at least one completed lap.</td></tr>'}</tbody></table></div>
+      <div class="legend"><span><b class="t-purple">Purple</b> highest average apex speed among the human drivers</span><span>Braking point and throttle-on are distances from the start line</span></div></div>`;
+  renderLaps(d,T,D);
+}
+
+function renderLaps(d,T,D){
+  $(T.seg).innerHTML=METRICS.map(([k,l])=>`<button type="button" data-metric="${k}" aria-pressed="${metric===k}">${l}</button>`).join('');
+  const m=METRICS.find(x=>x[0]===metric)||METRICS[0];
+  const zones=D.zones||[];const laps=d.laps||[];
+  const overall=Math.min(...D.drivers.flatMap(x=>x.laps.filter(l=>l.lap>1&&l.time>0).map(l=>l.time)),1e9);
+  const pb=Math.min(...laps.filter(l=>l.lap>1&&l.time>0).map(l=>l.time),1e9);
+  const secBest=k=>Math.min(...laps.filter(l=>l.lap>1&&l[k]>0).map(l=>l[k]),1e9);
+  const sb={s1:secBest('s1'),s2:secBest('s2'),s3:secBest('s3')};
+  const avg={};(d.profile||[]).forEach(r=>avg[r.corner]=r[m[0]]);
+  $(T.note).textContent=`Every completed lap for ${d.name}. Corner columns show ${m[1].toLowerCase()} (${m[2]}); the small number is the difference from their clean-lap average.`;
+  const cell=(l,z)=>{const c=(l.corners||{})[z.name];if(!c)return '<td class="n muted">–</td>';const v=c[m[0]];
+    if(v==null)return `<td class="n muted">${m[0]==='brake_at'?'flat':'–'}</td>`;
+    const a=avg[z.name];let cls='',dv='';
+    if(a!=null){const diff=v-a;dv=`<span class="dev">${diff>=0?'+':''}${Math.round(diff)}</span>`;
+      if(m[3]){if(diff>=3)cls='t-green';else if(diff<=-4)cls='t-red';}}
+    return `<td class="n ${cls}">${Math.round(v)}${dv}</td>`;};
+  const rows=laps.map(l=>{
+    const tcls=l.time===overall?'t-purple':l.time===pb?'t-green':'';
+    const flags=[l.kind==='out'?'<span class="tag">Out lap</span>':'',l.kind==='in'?'<span class="tag">In lap</span>':'',l.pit&&l.kind==='flying'?'<span class="tag blue">Pit</span>':'',l.sc?'<span class="tag amber">SC</span>':'',l.incident?'<span class="tag red">Incident</span>':'',!l.valid?'<span class="tag">Invalid</span>':''].filter(Boolean).join(' ');
+    const sec=k=>`<td class="n ${l[k]===sb[k]&&l.lap>1?'t-green':''}">${l[k]?l[k].toFixed(3):'–'}</td>`;
+    return `<tr class="${l.pit?'pit':''}"><td class="n" style="font-weight:700">${l.lap}</td><td class="n ${tcls} ${l.valid?'':'inv'}" style="font-weight:700">${ft(l.time)}</td>${sec('s1')}${sec('s2')}${sec('s3')}
+      <td class="n">P${l.position??'–'}</td><td>${tyre(l.tyre,true)} <span class="muted num">${l.tyre_age??''}</span></td>
+      <td class="n">${l.wear_avg??'–'}%</td><td class="n">${l.fuel_start!=null?l.fuel_start.toFixed(1):'–'}<span class="dev">${l.fuel_used!=null?'−'+l.fuel_used.toFixed(2):''}</span></td><td>${esc(l.mix||'–')}</td>
+      <td class="n" title="Deployed most at: ${esc((l.deploy_where||[]).join(', '))}">${l.ers_deployed_mj??'–'}<span class="dev">${l.deploy_pct!=null?l.deploy_pct+'% of lap':''}</span></td>
+      <td class="n ${l.track_limits?'t-yellow':'muted'}">${l.track_limits||0}</td><td class="n ${l.cuts?'t-yellow':'muted'}" title="${esc((l.cuts_where||[]).join(', '))}">${l.cuts||0}</td>
+      <td class="n ${l.traffic_pct>=10?'t-yellow':''}">${l.traffic_pct!=null?l.traffic_pct+'%':'–'}</td><td class="n">${l.avg_speed??'–'}</td><td class="n">${l.vmax??'–'}</td>
+      ${zones.map(z=>cell(l,z)).join('')}<td>${flags}</td></tr>`;}).join('');
+  $(T.laps).innerHTML=`<table><thead><tr><th class="n">Lap</th><th class="n">Time</th><th class="n">S1</th><th class="n">S2</th><th class="n">S3</th><th class="n">Pos</th><th>Tyre</th><th class="n">Avg wear</th><th class="n">Fuel kg <small class="muted">start / used</small></th><th>Mix</th><th class="n">ERS MJ</th><th class="n">4 off</th><th class="n">Cuts</th><th class="n">Traffic</th><th class="n">Avg km/h</th><th class="n">Top km/h</th>
+    ${zones.map(z=>`<th class="corner-h">${esc(z.name)}<small>${m[2]}</small></th>`).join('')}<th></th></tr></thead><tbody>${rows||`<tr><td colspan="${17+zones.length}" class="muted">No completed laps yet.</td></tr>`}</tbody></table>
+    <div class="legend"><span><b class="t-purple">Purple</b> fastest lap of the session</span><span><b class="t-green">Green</b> personal best lap or sector; for speeds, 3+ km/h above their average</span><span><b class="t-red">Red</b> 4+ km/h below their average</span><span>ERS: MJ deployed (limit 4) and share of the lap spent deploying; hover for where</span><span>Cuts: over the inside of a corner; hover for which corner. Traffic: share of the lap within 1 s behind another car</span></div>`;
+}
+
+/* ================= incidents dialog ================= */
+async function openIncident(id,sessionId){
+  const sid=sessionId||(S&&S.session&&S.session.id);
+  const inc=(S&&S.incidents||[]).find(i=>i.id===id);
+  let folder=inc&&inc.path&&!sessionId?inc.path.replace(/\\/g,'/').split('/').pop():null;
+  if(!folder){const r=await fetch(`/api/sessions/${encodeURIComponent(sid)}/incidents`).then(r=>r.json()).catch(()=>({incidents:[]}));const m=(r.incidents||[]).find(x=>x.id===id||x.folder===id);folder=m&&m.folder;}
+  if(!folder){toast('Still recording this incident. Try again in a few seconds.');return;}
+  const txt=await fetch(`/api/sessions/${encodeURIComponent(sid)}/incidents/${encodeURIComponent(folder)}/prompt.md`).then(r=>r.ok?r.text():null).catch(()=>null);
+  if(!txt){toast('Prompt not written yet.');return;}
+  $('dlgTitle').textContent=`Incident ${id}`;$('dlgBody').textContent=txt;
+  $('dlgData').href=`/api/sessions/${encodeURIComponent(sid)}/incidents/${encodeURIComponent(folder)}/incident.json`;
+  $('dlg').showModal();
+}
+$('dlgClose').onclick=()=>$('dlg').close();
+$('dlgCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('dlgBody').textContent);toast('Prompt copied. Paste it into Claude for a stewards’ ruling.');}
+  catch(e){const r=document.createRange();r.selectNodeContents($('dlgBody'));const g=getSelection();g.removeAllRanges();g.addRange(r);toast('Press Ctrl+C to copy');}};
+
+/* ================= sessions ================= */
+async function loadSessions(){
+  const r=await fetch('/api/sessions').then(r=>r.json()).catch(()=>null);if(!r)return;canControl=r.can_control;
+  const tot=r.sessions.reduce((a,s)=>a+s.total_bytes,0);
+  $('diskInfo').textContent=`${r.sessions.length} sessions · ${mb(tot)} on disk${S&&S.app?` · ${mb(S.app.free_disk)} free`:''}`;
+  $('sessRows').innerHTML=r.sessions.map(s=>{
+    const raw=s.raw_bytes?mb(s.raw_bytes):'<span class="muted">deleted</span>';
+    const ret=!s.raw_bytes?'–':s.keep_raw?`<span class="tag blue">Kept</span> ${canControl?`<button class="btn small" type="button" data-keep="${esc(s.id)}" data-v="0">Allow delete</button>`:''}`
+      :`<span class="muted">Deletes at next race</span> ${canControl?`<button class="btn small" type="button" data-keep="${esc(s.id)}" data-v="1">Keep</button> <button class="btn small" type="button" data-del="${esc(s.id)}">Delete now</button>`:''}`;
+    return `<tr><td class="num">${new Date(s.started*1000).toLocaleString()}</td><td><b>${esc(s.track)}</b> · ${esc(s.type)} <span class="muted">${esc(s.status||'')}</span></td>
+      <td>${esc((s.humans||[]).join(', '))}</td><td class="n">${s.incidents}</td><td class="n">${raw}</td><td>${ret}</td><td class="n">${mb(s.total_bytes)}</td>
+      <td>${s.has_summary?`<button class="btn small" type="button" data-open="${esc(s.id)}">Summary</button>`:''}</td></tr>`;}).join('')||'<tr><td colspan="8" class="muted">No sessions yet.</td></tr>';
+}
+async function openSummary(id){
+  showView('sessions');
+  const sm=await fetch(`/api/sessions/${encodeURIComponent(id)}/summary`).then(r=>r.ok?r.json():null).catch(()=>null);
+  const inc=await fetch(`/api/sessions/${encodeURIComponent(id)}/incidents`).then(r=>r.json()).catch(()=>({incidents:[]}));
+  if(!sm){$('sessDetail').innerHTML='<p class="muted">No summary for this session yet.</p>';return;}
+  const se=sm.session;
+  const cls=sm.classification.map(r=>`<tr><td class="n" style="font-weight:700;font-size:16px">${r.pos}</td><td style="${r.human?'font-weight:700':''}">${esc(r.name)}</td><td class="muted">${esc(r.team)}</td><td class="n">${r.grid}</td><td class="n">${r.laps}</td>
+    <td class="n">${r.pos===1&&r.race_time?ft(r.race_time):r.gap!=null?'+'+r.gap.toFixed(3):r.laps_down?'+'+r.laps_down+' lap':esc(r.status)}</td><td class="n">${r.penalties_s?r.penalties_s+'s':''}</td><td class="n">${ft(r.best_lap)}</td><td class="n">${r.pit_stops}</td></tr>`).join('');
+  const drv=sm.drivers.map(d=>`<div class="panel"><div class="phead"><h3>${esc(d.name)}</h3><span class="sub">${esc(d.team)} · P${d.grid} → P${d.finish} · best ${ft(d.best_lap)} · ${d.track_limits||0}× four wheels off · penalties ${d.penalties_s}s</span></div>
+      ${d.mistakes.length?`<div class="scroll"><table><thead><tr><th>Clock</th><th class="n">Lap</th><th>What happened</th></tr></thead><tbody>${d.mistakes.filter(m=>m.kind!=='track_limits').map(m=>`<tr><td class="num">${esc(m.clock||'')}</td><td class="n">${m.lap}</td><td style="white-space:normal"><span class="${m.severity==='major'?'t-red':'t-yellow'}">■</span> ${esc(m.text)}${m.incident?`<button class="incbtn" type="button" data-inc="${esc(m.incident)}" data-sess="${esc(id)}">Incident ${esc(m.incident)}</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="padding:0 14px">Clean race.</p>'}</div>`).join('');
+  const incs=(inc.incidents||[]).map(i=>`<div class="inc"><span class="id num">${esc(i.id)}</span><div><div class="tt">${esc(i.title)}</div><div class="sub">Lap ${i.lap??'–'} · ${esc(i.clock||'')} · ${esc((i.drivers||[]).join(', '))}</div></div><button class="btn small" type="button" data-inc="${esc(i.id)}" data-sess="${esc(id)}">Prompt</button></div>`).join('');
+  $('sessDetail').innerHTML=`<div class="shead"><h2>${esc(se.track)} · ${esc(se.type)}</h2><a class="btn small" href="/api/sessions/${encodeURIComponent(id)}/summary.md" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">summary.md</a></div>
+    <div class="panel scroll"><table><thead><tr><th class="n">Pos</th><th>Driver</th><th>Team</th><th class="n">Grid</th><th class="n">Laps</th><th class="n">Time / gap</th><th class="n">Pen</th><th class="n">Best</th><th class="n">Stops</th></tr></thead><tbody>${cls}</tbody></table></div>
+    ${incs?`<div class="panel"><div class="phead"><h3>Incidents</h3><span class="saved">Saved for analysis</span></div>${incs}</div>`:''}
+    ${sm.detail?`<div class="shead"><h2>Driver profile</h2><p>Recorded session.</p></div><div class="tabs" id="pTabs" role="tablist"></div><div class="detail" id="pDetail"></div>
+      <div class="shead"><h2>Lap by lap</h2><p id="pLblNote"></p><div class="seg" id="pMetricSeg" role="group" aria-label="Corner metric"></div></div><div class="panel scroll" id="pLaps"></div>`:''}
+    <div class="shead"><h2>Mistakes</h2></div>${drv}`;
+  PD=sm.detail||null;if(PD)renderDetail(PAST_T);
+  $('sessDetail').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function showView(v){
+  $('liveView').classList.toggle('hidden',v!=='live');$('sessionsView').classList.toggle('hidden',v!=='sessions');
+  $('viewBtn').textContent=v==='live'?'Sessions':'Live';if(v==='sessions')loadSessions();
+  try{history.replaceState(null,'',v==='live'?location.pathname:'#sessions');}catch(e){}
+}
+
+/* ================= events ================= */
+document.addEventListener('click',async ev=>{
+  const t=ev.target.closest('button');if(!t)return;
+  if(t.dataset.filter){feedFilter=t.dataset.filter;lastFeed='';try{localStorage.setItem('pw.feed2',feedFilter);}catch(e){}renderFeed();}
+  else if(t.dataset.sel){sel=+t.dataset.sel;try{localStorage.setItem('pw.sel',sel);}catch(e){}renderAll();}
+  else if(t.dataset.metric){metric=t.dataset.metric;try{localStorage.setItem('pw.metric',metric);}catch(e){}renderAll();}
+  else if(t.dataset.inc)openIncident(t.dataset.inc,t.dataset.sess);
+  else if(t.dataset.open)openSummary(t.dataset.open);
+  else if(t.dataset.keep){if(await post('/api/keep',{session:t.dataset.keep,keep:t.dataset.v==='1'})){toast(t.dataset.v==='1'?'Raw data will be kept':'Raw data can be deleted again');setTimeout(loadSessions,800);}}
+  else if(t.dataset.del){if(await post('/api/delete-raw',{session:t.dataset.del})){toast('Raw data deleted');setTimeout(loadSessions,800);}}
+  else if(t.dataset.act==='keepPending'){if(await post('/api/keep-all-pending'))toast('Earlier raw data will be kept');}
+  else if(t.dataset.act==='openSummary')openSummary(t.dataset.id);
+});
+$('viewBtn').onclick=()=>showView($('liveView').classList.contains('hidden')?'live':'sessions');
+async function flag(){if(await post('/api/flag',{}))toast('Flagged. Saving 20 s before and 10 s after.');}
+$('flagBtn').onclick=flag;
+document.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='f'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&!$('dlg').open){e.preventDefault();flag();}});
+
+function connect(){const es=new EventSource('/api/stream');es.onmessage=m=>{try{S=JSON.parse(m.data);render();}catch(e){}};
+  es.onerror=()=>{es.close();$('rec').className='rec';$('rec').textContent='RECONNECTING';setTimeout(connect,2000);};}
+fetch('/api/state').then(r=>r.json()).then(j=>{S=j;render();}).catch(()=>{});
+connect();
+if(location.hash==='#sessions')showView('sessions');
+</script>
+</body>
+</html>

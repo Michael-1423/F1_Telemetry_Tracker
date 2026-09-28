@@ -1,0 +1,47 @@
+# Copy to f1live.toml to customise. Everything here is optional; these are the defaults.
+
+[udp]
+host = "0.0.0.0"          # listen on every network interface (LAN + Tailscale)
+port = 20777              # the port every driver's game sends to
+# forward = ["127.0.0.1:20778"]   # also pass packets on to another tool (SimHub, etc.)
+
+[web]
+host = "0.0.0.0"          # "127.0.0.1" to hide the dashboard from other machines
+port = 8020
+allow_remote_control = false   # others can watch; only this computer can flag / keep / delete
+
+[storage]
+dir = "data/races"
+record_raw = true
+record_raw_for = ["race"]  # session kinds that keep raw packets: "race", "qualifying", "practice", "time_trial"
+# "delete_on_next_race": raw packets of earlier sessions are deleted once the next race starts
+# (after a grace period with a Keep button on the dashboard). "keep": never delete automatically.
+raw_retention = "delete_on_next_race"
+delete_grace_seconds = 120
+delete_trigger = "race"   # "race": only a new race triggers deletion; "session": any new session
+
+[session]
+end_timeout_seconds = 90  # a session is finalised after this long without packets
+
+[incidents]
+pre_seconds = 20          # data kept from before the trigger
+post_seconds = 10         # and after it
+max_seconds = 90          # cap when several triggers merge into one incident
+capture = ["collision", "spin", "damage", "penalty", "retirement", "manual"]
+include_ai_only = false   # also save incidents that involve no human driver
+sessions = ["race"]       # session kinds that save incident packages (practice & qualifying: summaries only)
+
+[drivers.aliases]
+# "Online name" = "Name to show"
+# "Luci BinLaaden" = "Luci"
+
+[detect]
+# Detector thresholds (see f1live/model.py DETECT_DEFAULTS for the full list)
+# blue_flag_warn_s = 8.0
+# contact_dist_m = 4.5
+# collision_dg = 6.0
+# slow_lap_factor = 1.04
+
+# Corner names for tracks other than COTA: [ [name, start_m, end_m], ... ] keyed by F1 2020 trackId
+# [corners]
+# 7 = [["Copse", 250, 600], ["Maggotts-Becketts", 1600, 2300]]
