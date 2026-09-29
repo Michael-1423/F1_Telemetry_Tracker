@@ -2,3 +2,7 @@
 data/
 .venv/
 .DS_Store
+f1_telemetry_capture.jsonl
+__pycache__/
+*.pyc
+f1live.toml
