@@ -333,7 +333,7 @@ function render(){
   if(a.recording_raw){rec.className='rec on';rec.textContent=`REC ${mb(a.raw_bytes)}${a.keep_current_raw?' · KEPT':''}`;}
   else{rec.className='rec';rec.textContent=stale&&s?`NO DATA ${Math.round(a.last_packet_age)}S`:(a.mode==='replay'?'REPLAY':'IDLE');}
   const b=[],pend=(S.retention&&S.retention.pending)||[];
-  if(pend.length){const tot=pend.reduce((x,p)=>x+p.raw_bytes,0);b.push(`<div class="banner"><b>Earlier raw data (${mb(tot)}) deletes in ${Math.min(...pend.map(p=>p.delete_in_s))}s</b><span class="muted">Summaries and incidents are always kept.</span><span class="spacer"></span><button class="btn small" type="button" data-act="keepPending">Keep it</button></div>`);}
+  if(pend.length){const tot=pend.reduce((x,p)=>x+p.raw_bytes+(p.incident_bytes||0),0);const withInc=pend.some(p=>p.incident_bytes);b.push(`<div class="banner"><b>Earlier raw data${withInc?' and incidents':''} (${mb(tot)}) deletes in ${Math.min(...pend.map(p=>p.delete_in_s))}s</b><span class="muted">Summaries are always kept.</span><span class="spacer"></span><button class="btn small" type="button" data-act="keepPending">Keep it</button></div>`);}
   if(s&&s.ended&&s.id)b.push(`<div class="banner fin"><b>Session complete</b><span class="muted">Summary saved.</span><span class="spacer"></span><button class="btn small" type="button" data-act="openSummary" data-id="${esc(s.id)}">View summary</button></div>`);
   if(s&&stale&&!s.ended)b.push(`<div class="banner"><b>No telemetry for ${Math.round(a.last_packet_age)}s</b><span class="muted">Paused, in the menus, or the connection dropped.</span></div>`);
   $('banners').innerHTML=b.join('');
@@ -532,7 +532,7 @@ async function loadSessions(){
   $('diskInfo').textContent=`${r.sessions.length} sessions · ${mb(tot)} on disk${S&&S.app?` · ${mb(S.app.free_disk)} free`:''}`;
   $('sessRows').innerHTML=r.sessions.map(s=>{
     const raw=s.raw_bytes?mb(s.raw_bytes):'<span class="muted">deleted</span>';
-    const ret=!s.raw_bytes?'–':s.keep_raw?`<span class="tag blue">Kept</span> ${canControl?`<button class="btn small" type="button" data-keep="${esc(s.id)}" data-v="0">Allow delete</button>`:''}`
+    const ret=!(s.raw_bytes||s.incident_bytes)?'–':s.keep_raw?`<span class="tag blue">Kept</span> ${canControl?`<button class="btn small" type="button" data-keep="${esc(s.id)}" data-v="0">Allow delete</button>`:''}`
       :`<span class="muted">Deletes at next race</span> ${canControl?`<button class="btn small" type="button" data-keep="${esc(s.id)}" data-v="1">Keep</button> <button class="btn small" type="button" data-del="${esc(s.id)}">Delete now</button>`:''}`;
     return `<tr><td class="num">${new Date(s.started*1000).toLocaleString()}</td><td><b>${esc(s.track)}</b> · ${esc(s.type)} <span class="muted">${esc(s.status||'')}</span></td>
       <td>${esc((s.humans||[]).join(', '))}</td><td class="n">${s.incidents}</td><td class="n">${raw}</td><td>${ret}</td><td class="n">${mb(s.total_bytes)}</td>

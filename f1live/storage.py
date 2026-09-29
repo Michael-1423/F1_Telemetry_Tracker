@@ -168,6 +168,7 @@ class SessionStore:
                 "incidents": len([d for d in os.listdir(os.path.join(path, "incidents"))
                                   if os.path.isdir(os.path.join(path, "incidents", d))])
                 if os.path.isdir(os.path.join(path, "incidents")) else 0,
+                "incident_bytes": dir_size(os.path.join(path, "incidents")),
                 "has_summary": os.path.exists(os.path.join(path, "summary.json")),
             })
             out.append(meta)
@@ -196,20 +197,21 @@ def _json_default(o):
 
 
 class Retention:
-    """Deletes raw recordings of earlier sessions once the next race starts.
+    """Deletes raw recordings (and, by default, incident packages) of earlier sessions once the next
+    race starts.
 
-    When a new race begins, every older session that has a raw file and no KEEP_RAW marker
-    is scheduled for deletion after a grace period. During the grace period the dashboard
-    shows a banner with a Keep button. Summaries, event logs and incident packages are
-    never deleted.
+    When a new race begins, every older session that has raw data or incident packages and no KEEP_RAW
+    marker is scheduled for deletion after a grace period. During the grace period the dashboard
+    shows a banner with a Keep button, which keeps both. Summaries and event logs are never deleted.
     """
 
     def __init__(self, store: SessionStore, mode: str = "delete_on_next_race", grace_s: float = 120.0,
-                 trigger: str = "race"):
+                 trigger: str = "race", incidents: bool = True):
         self.store = store
         self.mode = mode
         self.grace_s = grace_s
         self.trigger = trigger
+        self.incidents = incidents            # delete incident packages along with the raw data
         self.pending: dict[str, float] = {}   # session id -> wall time of deletion
         self.deleted: list[dict] = []
         self._lock = threading.Lock()
@@ -221,7 +223,7 @@ class Retention:
             return
         with self._lock:
             for s in self.store.list():
-                if s["id"] == new_session_id or s["keep_raw"] or not s["raw_bytes"]:
+                if s["id"] == new_session_id or s["keep_raw"] or not self._deletable_bytes(s):
                     continue
                 self.pending.setdefault(s["id"], now + self.grace_s)
 
@@ -243,14 +245,26 @@ class Retention:
         for sid in list(self.pending):
             self.keep(sid, True)
 
+    def _deletable_bytes(self, s: dict) -> int:
+        return s["raw_bytes"] + (s.get("incident_bytes", 0) if self.incidents else 0)
+
     def delete_now(self, session_id: str) -> bool:
         path = self.store.path_of(session_id)
         if not path:
             return False
+        size = 0
         raw = os.path.join(path, RAW_NAME)
         if os.path.exists(raw):
-            size = os.path.getsize(raw)
+            size += os.path.getsize(raw)
             os.remove(raw)
+        inc = os.path.join(path, "incidents")
+        if self.incidents and os.path.isdir(inc):
+            for name in os.listdir(inc):
+                p = os.path.join(inc, name)
+                if os.path.isdir(p):
+                    size += dir_size(p)
+                    shutil.rmtree(p, ignore_errors=True)
+        if size:
             self.deleted.append({"id": session_id, "bytes": size, "at": time.time()})
         with self._lock:
             self.pending.pop(session_id, None)
@@ -274,7 +288,8 @@ class Retention:
             path = self.store.path_of(p["id"])
             raw = os.path.join(path, RAW_NAME) if path else None
             p["raw_bytes"] = os.path.getsize(raw) if raw and os.path.exists(raw) else 0
-        return {"mode": self.mode, "pending": pend, "recently_deleted": self.deleted[-5:]}
+            p["incident_bytes"] = dir_size(os.path.join(path, "incidents")) if (path and self.incidents) else 0
+        return {"mode": self.mode, "incidents": self.incidents, "pending": pend, "recently_deleted": self.deleted[-5:]}
 
 
 def free_disk_bytes(path: str) -> int:

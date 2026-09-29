@@ -19,6 +19,7 @@ record_raw_for = ["race"]  # session kinds that keep raw packets: "race", "quali
 raw_retention = "delete_on_next_race"
 delete_grace_seconds = 120
 delete_trigger = "race"   # "race": only a new race triggers deletion; "session": any new session
+delete_incidents = true   # also delete earlier sessions' incident packages (kept sessions keep theirs)
 
 [session]
 end_timeout_seconds = 90  # a session is finalised after this long without packets

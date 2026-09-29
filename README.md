@@ -35,7 +35,7 @@ the race happens, saves an incident package around every collision, and writes a
 - **End-of-session summary**: `summary.json` and `summary.md` with classification, stints, pit stops,
   penalties, mistakes, driving-style metrics and typical braking points.
 - **Automatic cleanup**: raw packets of the previous race are deleted when the next race starts, unless you
-  keep them. Summaries and incidents are always kept.
+  keep them. Their incident packages are deleted at the same time. Summaries and event logs are always kept.
 
 No dependencies beyond Python 3.11+.
 
@@ -67,8 +67,9 @@ No dependencies beyond Python 3.11+.
 ### Keeping raw data
 
 Raw packets are only recorded for races (about 170 MB per 14-lap race with five drivers streaming); practice
-and qualifying keep just the summary. Race raw data is deleted when the next race
-starts. You'll see a banner with a 2-minute countdown and a **Keep it** button. Other ways to keep them:
+and qualifying keep just the summary. Race raw data and incident packages are deleted when the next race
+starts (set `delete_incidents = false` to keep incidents). You'll see a banner with a 2-minute countdown and a
+**Keep it** button, which keeps both. Other ways to keep them:
 
 ```
 python -m f1live --keep-raw               # keep the race you're about to record
@@ -77,7 +78,7 @@ python -m f1live keep <session-id>        # keep any session; --off to undo
 python -m f1live sessions                 # list sessions, sizes and what's kept
 ```
 
-The Sessions page on the dashboard can do the same, and can delete raw data straight away.
+The Sessions page on the dashboard can do the same, and can delete a session's raw data and incidents straight away.
 
 ## Reviewing incidents with an LLM
 

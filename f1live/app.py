@@ -40,7 +40,8 @@ class Pipeline:
         st = cfg.get("storage", {})
         self.store = SessionStore(st.get("dir", "data/races"))
         self.retention = Retention(self.store, st.get("raw_retention", "delete_on_next_race"),
-                                   float(st.get("delete_grace_seconds", 120)), st.get("delete_trigger", "race"))
+                                   float(st.get("delete_grace_seconds", 120)), st.get("delete_trigger", "race"),
+                                   bool(st.get("delete_incidents", True)))
         self.record_raw = bool(st.get("record_raw", True))
         # which session kinds keep raw packets / incident packages (practice & quali: summaries only)
         self.raw_kinds = set(st.get("record_raw_for", ["race"]))
