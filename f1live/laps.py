@@ -98,7 +98,7 @@ def profile(laps: list[dict], zones: list[dict]) -> list[dict]:
     use = [l for l in laps if l.get("clean") and l.get("corners")]
     basis = "clean laps"
     if not use:
-        use = [l for l in laps if l.get("corners") and l["lap"] > 1 and not l.get("pit")]
+        use = [l for l in laps if l.get("corners") and not l.get("standing") and l.get("timed", True) and not l.get("pit")]
         basis = "all laps"
     rows = []
     for z in zones:

@@ -98,6 +98,12 @@ CUT_INFRINGEMENTS = {7, 8, 9, 25, 27, 28, 29}
 # Corner maps: (name, start m, end m) in lap distance. Tracks without a map fall back to
 # "S<sector> <km>" labels. Add your own in config.toml under [corners."<trackId>"].
 CORNERS: dict[int, list[tuple[str, float, float]]] = {
+    4: [  # Circuit de Barcelona-Catalunya (2020 layout, with the T14-T15 chicane), measured from 2020 telemetry
+        ("Main straight", 0, 700), ("T1", 700, 880), ("T2", 880, 1030), ("T3", 1030, 1500), ("T4", 1500, 1880),
+        ("T5", 1880, 2250), ("T6", 2250, 2440), ("T7", 2440, 2610), ("T8", 2610, 2780), ("T9", 2780, 3050),
+        ("Back straight", 3050, 3350), ("T10", 3350, 3580), ("T11", 3580, 3660), ("T12", 3660, 3920),
+        ("T13", 3920, 4110), ("T14-T15", 4110, 4230), ("T16", 4230, 4500), ("Main straight", 4500, 4700),
+    ],
     15: [  # Circuit of the Americas, measured from 2020 telemetry
         ("T1", 540, 760), ("T2", 900, 1150), ("Esses T3-T6", 1150, 1950), ("T7-T9", 1950, 2350),
         ("T10", 2350, 2450), ("T11", 2450, 2720), ("Back straight", 2720, 3550), ("T12", 3550, 3900),

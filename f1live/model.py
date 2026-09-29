@@ -152,6 +152,9 @@ class Car:
         self.traffic_now: dict | None = None
         self.cur_status: Counter = Counter()
         self.cur_start_pit = True
+        # Practice/qualifying: the game only counts timed laps (an out lap, or a lap abandoned into the
+        # pits, never moves currentLapNum), so we number every lap driven ourselves.
+        self.count_laps = False
         self.cur_time_bins: dict[int, float] = {}   # 10 m bin -> current lap time (for the live delta)
         self.best_time_bins: dict[int, float] = {}
         self.best_valid_time: float | None = None
@@ -188,6 +191,8 @@ class Car:
     # convenient views -------------------------------------------------------
     @property
     def lap_num(self) -> int:
+        if self.count_laps:
+            return len(self.laps) + 1
         return int(self.lap.get("currentLapNum", 0) or 0)
 
     @property
@@ -195,7 +200,7 @@ class Car:
         return int(self.lap.get("carPosition", 0) or 0)
 
     def best_lap(self) -> float | None:
-        ts = [l["time"] for l in self.laps if l["time"] > 0 and l["lap"] > 1]
+        ts = [l["time"] for l in self.laps if l["time"] > 0 and l.get("timed", True) and not l.get("standing")]
         return min(ts) if ts else None
 
     def best_clean(self) -> float | None:
@@ -385,7 +390,7 @@ class Session:
             for i, ld in enumerate(pkt["lapData"]):
                 if self.auth[i] == key:
                     c = self.cars[i]
-                    if c.lap.get("resultStatus", 2) in L.OUT_OF_RACE:
+                    if self._out(c):
                         c.lap = ld  # retired cars: keep state, no more detection
                         continue
                     self._on_lap(c, ld, h["sessionTime"], wall)
@@ -438,10 +443,15 @@ class Session:
                 if i < 22 and cd.get("position"):
                     self.cars[i].result = cd
 
-    @staticmethod
-    def _racing(c: "Car") -> bool:
-        """Detectors only run for cars still racing (not finished, retired or disqualified)."""
-        return c.lap.get("resultStatus", 2) < 3 or not c.lap
+    def _racing(self, c: "Car") -> bool:
+        """Detectors only run for cars still racing (not finished, retired or disqualified). In practice and
+        qualifying they always run: the game marks a car "retired" after terminal damage (or "finished"
+        part-way through) and keeps that status after it sends the car back out from the garage."""
+        return self.kind != "race" or c.lap.get("resultStatus", 2) < 3 or not c.lap
+
+    def _out(self, c: "Car") -> bool:
+        """Out of the race for good (race sessions only; see _racing)."""
+        return self.kind == "race" and c.lap.get("resultStatus", 2) in L.OUT_OF_RACE
 
     # ------------------------------------------------------------ packet types
     def _auto_zones(self) -> None:
@@ -467,6 +477,8 @@ class Session:
             self.zones_version += 1
         self.session_type = p["sessionType"]
         self.total_laps = p["totalLaps"]
+        for c in self.cars:
+            c.count_laps = self.kind != "race"
         self.info = {k: p[k] for k in ("weather", "trackTemperature", "airTemperature", "totalLaps",
                                          "trackLength", "sessionType", "trackId", "sessionTimeLeft",
                                          "sessionDuration", "pitSpeedLimit", "networkGame", "formula")}
@@ -540,7 +552,11 @@ class Session:
             self.fastest_lap = (v, det.get("lapTime"))
             self.emit("fastest_lap", "info", [v], f"Fastest lap {fmt_time(det.get('lapTime'))}", st=st, wall=wall)
         elif code == "RTMT" and v is not None and v < 22:
-            self.emit("retirement", "major", [v], "Retired", st=st, wall=wall, capture=True)
+            if self.kind == "race":
+                self.emit("retirement", "major", [v], "Retired", st=st, wall=wall, capture=True)
+            else:
+                self.emit("race_control", "minor", [v], f"{self.display_name(v)}: terminal damage, back to the garage",
+                          st=st, wall=wall)
         elif code == "RCWN" and v is not None and v < 22:
             self.emit("race_control", "race", [v], "Race winner", st=st, wall=wall)
         elif code == "CHQF":
@@ -609,9 +625,14 @@ class Session:
         ds, pds = ld.get("driverStatus", 4), prev.get("driverStatus", 4)
         c.cur_status[ds] += 1
         if ds == 0 and pds != 0:
-            self._abandon_lap(c)            # back to the garage: this lap will never be completed
+            # back to the garage: this lap will never be completed. In practice/qualifying keep it as an
+            # untimed in-lap (often a flying lap abandoned after it was invalidated).
+            if c.count_laps and len(c.cur_trace) * 5 > 0.1 * (self.track_length or 5000):
+                self._close_lap(c, prev, ld, st, wall, untimed=float(prev.get("currentLapTime") or 0.0),
+                                kind="out" if c.cur_start_pit else "in")
+            self._abandon_lap(c)
         if prev.get("pitStatus", 0) > 0 and ld.get("pitStatus", 0) == 0:
-            c.runs.append({"n": len(c.runs) + 1, "lap": lapn, "st": round(st, 1),
+            c.runs.append({"n": len(c.runs) + 1, "lap": c.lap_num, "st": round(st, 1),
                            "fuel_out": round(float(c.status.get("fuelInTank", 0) or 0), 2),
                            "tyre": L.tyre_label(c.status.get("actualTyreCompound"), c.status.get("visualTyreCompound")),
                            "tyre_age": c.status.get("tyresAgeLaps"), "mix": L.FUEL_MIX.get(c.status.get("fuelMix"))})
@@ -621,6 +642,9 @@ class Session:
             c.cur_lap_flags.add("pit")
         if lapn > prevn and prevn > 0:
             self._close_lap(c, prev, ld, st, wall)
+        elif c.count_laps and lapn == prevn and ds != 0 and self._crossed_line(c, prev, ld):
+            # crossed the line without the game counting a lap: the end of an out lap
+            self._close_lap(c, prev, ld, st, wall, untimed=float(prev.get("currentLapTime") or 0.0))
         if ld["penalties"] > prev.get("penalties", 0):
             added = ld["penalties"] - prev.get("penalties", 0)
             c.penalty_s = ld["penalties"]
@@ -636,10 +660,10 @@ class Session:
         self._pit_logic(c, prev, ld, st, wall)
         rs, prs = ld.get("resultStatus", 0), prev.get("resultStatus", 0)
         if rs != prs:
-            if rs in L.OUT_OF_RACE:
+            if rs in L.OUT_OF_RACE and self.kind == "race":
                 self.emit("retirement", "major", [c.idx], L.RESULT_STATUS[rs].capitalize(), st=st, wall=wall,
                           capture=True)
-            elif rs == 3:
+            elif rs == 3 and (self.kind == "race" or c.finish_st is None):
                 c.finish_st = st
                 self.emit("finish", "info", [c.idx], f"Finished P{ld['carPosition']}", st=st, wall=wall)
         self._trail(c, ld, st)
@@ -659,16 +683,35 @@ class Session:
         if tr[b] < 0:
             tr[b] = st
 
-    def _close_lap(self, c: Car, prev: dict, ld: dict, st: float, wall: float) -> None:
-        lt = float(ld.get("lastLapTime") or 0.0)
-        s1 = (prev.get("sector1TimeInMS") or 0) / 1000
-        s2 = (prev.get("sector2TimeInMS") or 0) / 1000
+    def _crossed_line(self, c: Car, prev: dict, ld: dict) -> bool:
+        """The car crossed the start/finish line: the lap timer restarted, or the lap distance wrapped,
+        after covering most of a lap."""
+        if len(c.cur_trace) * 5 < 0.5 * (self.track_length or 5000):
+            return False
+        t0, t1 = prev.get("currentLapTime") or 0.0, ld.get("currentLapTime") or 0.0
+        if t0 > 20 and t1 < 5 and t0 - t1 > 15:
+            return True
+        tl = self.track_length or 0
+        d0, d1 = prev.get("lapDistance", -1.0), ld.get("lapDistance", -1.0)
+        return bool(tl and d0 > tl - 150 and 0 <= d1 < 150)
+
+    def _close_lap(self, c: Car, prev: dict, ld: dict, st: float, wall: float,
+                   untimed: float | None = None, kind: str | None = None) -> None:
+        """Record the lap just completed. `untimed` is set for laps the game doesn't time (practice and
+        qualifying out laps and in-laps): it holds our own measurement of the lap time."""
+        timed = untimed is None
+        lt = float(ld.get("lastLapTime") or 0.0) if timed else untimed
+        s1 = (prev.get("sector1TimeInMS") or 0) / 1000 if timed else 0.0
+        s2 = (prev.get("sector2TimeInMS") or 0) / 1000 if timed else 0.0
         s3 = lt - s1 - s2 if lt and s1 and s2 else 0.0
         flags = set(c.cur_lap_flags)
-        if prev.get("currentLapInvalid"):
+        if prev.get("currentLapInvalid") and timed:   # untimed laps: only if invalidated during this lap
             flags.add("invalid")
+        game_lap = prev.get("currentLapNum", 0)
         lap = {
-            "lap": prev.get("currentLapNum", 0), "time": round(lt, 3), "s1": round(s1, 3), "s2": round(s2, 3),
+            "lap": c.lap_num if c.count_laps else game_lap, "game_lap": game_lap, "timed": timed,
+            "standing": not c.count_laps and game_lap == 1,
+            "time": round(lt, 3), "s1": round(s1, 3), "s2": round(s2, 3),
             "s3": round(s3, 3) if s3 > 0 else 0.0, "valid": "invalid" not in flags, "pit": "pit" in flags,
             "sc": "sc" in flags, "incident": "incident" in flags, "position": ld.get("carPosition"),
             "tyre": L.tyre_label(c.status.get("actualTyreCompound"), c.status.get("visualTyreCompound")),
@@ -679,7 +722,12 @@ class Session:
         wear = c.status.get("tyresWear") or []
         fuel_now = float(c.status.get("fuelInTank", 0) or 0)
         ended_in_pit = bool(ld.get("pitStatus")) or bool(prev.get("pitStatus")) or c.cur_status.get(2, 0) > c.cur_status.get(1, 0)
-        lap["kind"] = "out" if c.cur_start_pit else ("in" if ended_in_pit else "flying")
+        if kind:
+            lap["kind"] = kind
+        elif c.count_laps and timed:        # the game never times an out lap
+            lap["kind"] = "in" if ended_in_pit else "flying"
+        else:
+            lap["kind"] = "out" if c.cur_start_pit else ("in" if ended_in_pit else "flying")
         lap["fuel_start"] = round(c._fuel_lap_start, 2) if c._fuel_lap_start is not None else None
         lap["traffic_s"] = round(c.cur_traffic_s, 1)
         lap["traffic_pct"] = round(100 * c.cur_traffic_s / lt) if lt > 0 else None
@@ -692,16 +740,16 @@ class Session:
             "mix": L.FUEL_MIX.get(c.cur_mix.most_common(1)[0][0]) if c.cur_mix else None,
             "ers_deployed_mj": round(c.ers_lap_deploy / 1e6, 2), "ers_harvested_mj": round(c.ers_lap_harvest / 1e6, 2),
             "deploy_zones": LP.segments(c.cur_deploy_bins), "track_limits": c.cur_tl,
-            "avg_speed": round(self.track_length / lt * 3.6, 1) if (lt > 0 and self.track_length and lap["lap"] > 1) else None,
+            "avg_speed": round(self.track_length / lt * 3.6, 1) if (lt > 0 and self.track_length and timed and not lap["standing"]) else None,
             "vmax": vmax, "corners": LP.corner_metrics(c.cur_trace, c.cur_onsets, self.zones) if self.zones else {},
         })
         best_clean = c.best_clean()
-        lap["clean"] = bool(lt > 0 and lap["lap"] > 1 and lap["valid"] and not lap["pit"] and not lap["sc"]
+        lap["clean"] = bool(lt > 0 and timed and not lap["standing"] and lap["valid"] and not lap["pit"] and not lap["sc"]
                             and not lap["incident"] and (best_clean is None or lt < best_clean * self.det["clean_lap_factor"]))
         # slow-lap detector
         ref = best_clean or c.best_lap()
-        if (ref and lt > ref * self.det["slow_lap_factor"] and lap["lap"] > 1 and not lap["pit"] and not lap["sc"]
-                and c.human and ld.get("resultStatus", 2) == 2):
+        if (ref and timed and lt > ref * self.det["slow_lap_factor"] and not lap["standing"] and not lap["pit"] and not lap["sc"]
+                and c.human and self._racing(c)):
             reasons = [e["text"] for e in self.events[-300:] if e["id"] in c.cur_lap_events and e["severity"] in ("major", "minor")]
             lost = lt - ref
             self.emit("slow_lap", "minor", [c.idx], f"Slow lap {lap['lap']}: {fmt_time(lt)} (+{lost:.1f}s)"
@@ -709,7 +757,7 @@ class Session:
                       data={"lap": lap["lap"], "time": lt, "lost": round(lost, 2), "reasons": reasons[:4]})
         c.laps.append(lap)
         c.lap_positions.append(ld.get("carPosition", 0))
-        if lap["valid"] and lt > 0 and lap["kind"] != "out" and (c.best_valid_time is None or lt < c.best_valid_time):
+        if lap["valid"] and timed and lt > 0 and lap["kind"] != "out" and (c.best_valid_time is None or lt < c.best_valid_time):
             c.best_valid_time = lt
             c.best_time_bins = c.cur_time_bins
         if c.human:
@@ -740,7 +788,8 @@ class Session:
         c.cur_traffic_s = 0.0
         c.cur_status = Counter()
         c.cur_time_bins = {}
-        c.cur_start_pit = bool(ld.get("pitStatus")) or ld.get("driverStatus") == 3
+        # (the game may still say "out lap" for a moment after an out lap ends at the line)
+        c.cur_start_pit = timed and (bool(ld.get("pitStatus")) or ld.get("driverStatus") == 3)
 
     def _abandon_lap(self, c: Car) -> None:
         """The driver returned to the garage mid-lap: drop what was collected for this lap."""
@@ -771,7 +820,7 @@ class Session:
         best = None
         for j, o in enumerate(laps):
             if j == c.idx or not self.cars[j].active or o.get("pitStatus") or o.get("driverStatus") == 0 \
-                    or o.get("resultStatus", 2) != 2:
+                    or (o.get("resultStatus", 2) != 2 if self.kind == "race" else o.get("resultStatus", 2) < 2):
                 continue
             gap = (o.get("lapDistance", 0.0) - d) % self.track_length
             if gap > 0 and (best is None or gap < best[0]):
@@ -838,7 +887,7 @@ class Session:
         if ps == pps:
             return
         if pps == 0 and ps > 0:
-            c._pit = {"lap": ld["currentLapNum"], "entry_st": st, "box_st": None, "box_s": 0.0,
+            c._pit = {"lap": c.lap_num, "entry_st": st, "box_st": None, "box_s": 0.0,
                       "tyre_before": L.tyre_label(c.status.get("actualTyreCompound"), c.status.get("visualTyreCompound")),
                       "age_before": c.status.get("tyresAgeLaps"),
                       "damage_before": {k: c.status.get(k, 0) for k, _ in DAMAGE_PARTS}}

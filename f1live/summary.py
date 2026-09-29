@@ -15,9 +15,9 @@ def _dmg(c: Car) -> dict:
             "gearbox": s.get("gearBoxDamage", 0), "drs_fault": s.get("drsFault", 0)}
 
 
-def _state(c: Car) -> str | None:
+def _state(s: Session, c: Car) -> str | None:
     rs = c.lap.get("resultStatus", 0)
-    if rs in (3, 4, 5, 6, 7):
+    if rs in (3, 4, 5, 6, 7) and s.kind == "race":   # practice/quali: cars go back out after "retiring"
         return L.RESULT_STATUS[rs]
     ps = c.lap.get("pitStatus", 0)
     if ps:
@@ -37,7 +37,7 @@ def car_row(s: Session, c: Car, gaps: dict) -> dict:
         "tyre": L.tyre_label(c.status.get("actualTyreCompound"), c.status.get("visualTyreCompound")),
         "tyre_age": c.status.get("tyresAgeLaps"), "pits": len(c.pit_stops),
         "penalties": c.lap.get("penalties", 0), "warnings": c.warnings,
-        "state": _state(c), "flag": L.FIA_FLAGS.get(c.status.get("vehicleFiaFlags", 0)),
+        "state": _state(s, c), "flag": L.FIA_FLAGS.get(c.status.get("vehicleFiaFlags", 0)),
         "dmg": _dmg(c), "invalid": bool(c.lap.get("currentLapInvalid")),
         "sector": c.lap.get("sector", 0), "drs": c.tel.get("drs", 0), "speed": c.tel.get("speed"),
     }
@@ -54,7 +54,7 @@ def human_live(s: Session, c: Car, gaps: dict, fastest: float | None) -> dict:
     g = gaps.get(c.idx, {})
     return {
         "idx": c.idx, "name": s.display_name(c.idx), "team": c.team, "color": L.TEAM_COLORS.get(c.team, "#888"),
-        "own": c.own, "pos": c.position, "grid": c.grid, "lap": c.lap_num, "state": _state(c),
+        "own": c.own, "pos": c.position, "grid": c.grid, "lap": c.lap_num, "state": _state(s, c),
         "gap": g.get("gap"), "interval": g.get("interval"), "laps_down": g.get("laps_down", 0),
         "tyre": tyre, "tyre_age": st.get("tyresAgeLaps"),
         # wheel order in the game is RL, RR, FL, FR; send FL, FR, RL, RR for display
@@ -83,7 +83,7 @@ def _deploy_pct(s: Session, lap: dict) -> int | None:
 
 
 def _best_valid(c: Car) -> tuple[float | None, dict | None]:
-    laps = [l for l in c.laps if l["valid"] and l["time"] > 0 and l.get("kind") != "out"]
+    laps = [l for l in c.laps if l["valid"] and l.get("timed", True) and l["time"] > 0]
     if not laps:
         return None, None
     best = min(laps, key=lambda l: l["time"])
@@ -111,7 +111,8 @@ def timesheet(s: Session) -> list[dict]:
             "fuel_out": run["fuel_out"] if run else None, "run_mix": run["mix"] if run else None,
             "traffic_pct": bl.get("traffic_pct") if bl else None, "traffic_s": bl.get("traffic_s") if bl else None,
             "cuts": cc["cuts"], "cuts_best": cuts_on_best, "wides": cc["wides"], "four_off": c.tl_count,
-            "game_cuts": c.game_cuts, "laps": len(c.laps), "valid_laps": sum(1 for l in c.laps if l["valid"] and l.get("kind") == "flying"),
+            "game_cuts": c.game_cuts, "laps": sum(1 for l in c.laps if l.get("timed", True)), "laps_all": len(c.laps),
+            "valid_laps": sum(1 for l in c.laps if l["valid"] and l.get("timed", True)),
             "runs": len(c.runs), "vmax": max((l.get("vmax") or 0) for l in c.laps) if c.laps else None,
             "speed_trap": c.speed_trap or None,
             # live
@@ -200,7 +201,7 @@ def driver_detail(s: Session) -> dict:
             "profile": s.corner_profile(c),
             "laps": laps,
             "cuts": s.cut_counts(c), "four_off": c.tl_count,
-            "runs": [dict(r, laps=sum(1 for l in c.laps if l.get("run") == r["n"])) for r in c.runs],
+            "runs": [dict(r, laps=sum(1 for l in c.laps if l.get("run") == r["n"] and l.get("timed", True))) for r in c.runs],
             "track_limits_where": dict(c.tl_where.most_common()),
             "cuts_where": s.cut_counts(c)["cuts_where"],
             "style": s.style_metrics(c),
@@ -271,7 +272,7 @@ def build_summary(s: Session, incidents: list[dict]) -> dict:
     for c in [c for c in s.cars if c.active and c.human]:
         laps = [l for l in c.laps if l["time"] > 0]
         clean = [l["time"] for l in laps if l.get("clean")]
-        valid_sectors = [l for l in laps if l["lap"] > 1 and l["s1"] and l["s2"] and l["s3"]]
+        valid_sectors = [l for l in laps if not l.get("standing") and l.get("timed", True) and l["s1"] and l["s2"] and l["s3"]]
         th = None
         if valid_sectors:
             th = min(l["s1"] for l in valid_sectors) + min(l["s2"] for l in valid_sectors) + min(l["s3"] for l in valid_sectors)

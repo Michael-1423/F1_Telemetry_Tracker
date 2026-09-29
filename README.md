@@ -20,6 +20,8 @@ the race happens, saves an incident package around every collision, and writes a
   traffic (share of the lap within 1 s behind another car), corners cut, four-wheels-off, valid/total laps
   and runs, plus what each driver is doing right now (out lap / flying lap with a live delta to their best).
   The driver profile and lap-by-lap sections are the same as in races, with lap types (out / flying / in).
+  Every lap driven is listed, including out laps and laps abandoned into the pits. The game doesn't count or
+  time these, so the tracker numbers the laps itself and measures their times (shown with ~).
   Only the summary and event log are saved; no raw data and no incident packages.
 - **Corners cut vs running wide**: every excursion with 2+ wheels beyond the kerbs is classed by which side
   of the car left the track first compared with the way the driver is steering: inside wheels = a cut,

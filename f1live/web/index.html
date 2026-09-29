@@ -391,7 +391,7 @@ function renderTimesheet(){
     if(r.traffic_now!=null&&r.traffic_now<1.5&&!r.pit)parts.push(`<span class="tag amber">Traffic ${r.traffic_now.toFixed(1)}s</span>`);
     return parts.join('');};
   $('timesheet').innerHTML=`<table class="ts"><thead><tr><th class="n">Pos</th><th>Driver</th><th class="n">Fastest lap</th><th class="n">Gap</th><th class="n">S1</th><th class="n">S2</th><th class="n">S3</th>
-    <th>Tyre</th><th class="n">ERS used</th><th>Mix</th><th class="n">Fuel</th><th class="n">Traffic</th><th class="n">Cuts</th><th class="n">4 wheels off</th><th class="n">Laps</th><th class="n">Top km/h</th><th>Now</th></tr></thead><tbody>
+    <th>Tyre</th><th class="n">ERS used</th><th>Mix</th><th class="n">Fuel</th><th class="n">Traffic</th><th class="n">Cuts</th><th class="n">4 wheels off</th><th class="n">Laps <small class="muted">valid / timed</small></th><th class="n">Top km/h</th><th>Now</th></tr></thead><tbody>
     ${rows.map(r=>`<tr><td class="n" style="font-weight:700;font-size:16px">${r.pos??'–'}</td>
       <td class="tsdrv" style="--tc:${r.color}"><b>${esc(r.name)}</b><div class="sub">${esc(r.team)}${r.own?'':' · via other game'}</div></td>
       <td class="n"><span class="besttime num ${r.pos===1?'t-purple':''}">${ft(r.best)}</span><div class="sub">${r.best_lap?'lap '+r.best_lap:'no valid lap'}</div></td>
@@ -403,7 +403,7 @@ function renderTimesheet(){
       <td class="n ${r.traffic_pct>=10?'t-yellow':''}">${r.traffic_pct!=null?r.traffic_pct+'%':'–'}</td>
       <td class="n ${r.cuts?'t-yellow':'muted'}">${r.cuts}<div class="sub">${r.cuts_best?r.cuts_best+' on best':r.game_cuts?r.game_cuts+' by game':''}</div></td>
       <td class="n ${r.four_off?'':'muted'}">${r.four_off}</td>
-      <td class="n">${r.valid_laps}/${r.laps}<div class="sub">${r.runs} run${r.runs===1?'':'s'}</div></td>
+      <td class="n">${r.valid_laps}/${r.laps}<div class="sub">${r.runs} run${r.runs===1?'':'s'}${r.laps_all!=null?` · ${r.laps_all} driven`:''}</div></td>
       <td class="n">${r.vmax??'–'}</td>
       <td class="now"><div class="live-line">${status(r)}</div><div class="sub num">${esc(String(r.tyre_now||'').split(' (')[0])} · ${esc(r.mix_now||'')} · ${r.fuel_now} kg · ERS ${r.ers_now}%${r.deploying?' · deploying':''}</div></td></tr>`).join('')
       ||'<tr><td colspan="17" class="muted">No human drivers on track yet.</td></tr>'}</tbody></table>`;
@@ -478,12 +478,14 @@ function renderLaps(d,T,D){
   $(T.seg).innerHTML=METRICS.map(([k,l])=>`<button type="button" data-metric="${k}" aria-pressed="${metric===k}">${l}</button>`).join('');
   const m=METRICS.find(x=>x[0]===metric)||METRICS[0];
   const zones=D.zones||[];const laps=d.laps||[];
-  const overall=Math.min(...D.drivers.flatMap(x=>x.laps.filter(l=>l.lap>1&&l.time>0).map(l=>l.time)),1e9);
-  const pb=Math.min(...laps.filter(l=>l.lap>1&&l.time>0).map(l=>l.time),1e9);
-  const secBest=k=>Math.min(...laps.filter(l=>l.lap>1&&l[k]>0).map(l=>l[k]),1e9);
+  // laps that count for bests: timed by the game, and not a race's standing-start lap
+  const counts=l=>l.timed!==false&&(l.standing!=null?!l.standing:(D.kind!=='race'||l.lap>1));
+  const overall=Math.min(...D.drivers.flatMap(x=>x.laps.filter(l=>counts(l)&&l.time>0).map(l=>l.time)),1e9);
+  const pb=Math.min(...laps.filter(l=>counts(l)&&l.time>0).map(l=>l.time),1e9);
+  const secBest=k=>Math.min(...laps.filter(l=>counts(l)&&l[k]>0).map(l=>l[k]),1e9);
   const sb={s1:secBest('s1'),s2:secBest('s2'),s3:secBest('s3')};
   const avg={};(d.profile||[]).forEach(r=>avg[r.corner]=r[m[0]]);
-  $(T.note).textContent=`Every completed lap for ${d.name}. Corner columns show ${m[1].toLowerCase()} (${m[2]}); the small number is the difference from their clean-lap average.`;
+  $(T.note).textContent=`Every lap ${d.name} drove. Out laps and in-laps aren't timed by the game; their times (marked ~) are measured here. Corner columns show ${m[1].toLowerCase()} (${m[2]}); the small number is the difference from their clean-lap average.`;
   const cell=(l,z)=>{const c=(l.corners||{})[z.name];if(!c)return '<td class="n muted">–</td>';const v=c[m[0]];
     if(v==null)return `<td class="n muted">${m[0]==='brake_at'?'flat':'–'}</td>`;
     const a=avg[z.name];let cls='',dv='';
@@ -491,10 +493,10 @@ function renderLaps(d,T,D){
       if(m[3]){if(diff>=3)cls='t-green';else if(diff<=-4)cls='t-red';}}
     return `<td class="n ${cls}">${Math.round(v)}${dv}</td>`;};
   const rows=laps.map(l=>{
-    const tcls=l.time===overall?'t-purple':l.time===pb?'t-green':'';
+    const tcls=!counts(l)?'muted':l.time===overall?'t-purple':l.time===pb?'t-green':'';
     const flags=[l.kind==='out'?'<span class="tag">Out lap</span>':'',l.kind==='in'?'<span class="tag">In lap</span>':'',l.pit&&l.kind==='flying'?'<span class="tag blue">Pit</span>':'',l.sc?'<span class="tag amber">SC</span>':'',l.incident?'<span class="tag red">Incident</span>':'',!l.valid?'<span class="tag">Invalid</span>':''].filter(Boolean).join(' ');
-    const sec=k=>`<td class="n ${l[k]===sb[k]&&l.lap>1?'t-green':''}">${l[k]?l[k].toFixed(3):'–'}</td>`;
-    return `<tr class="${l.pit?'pit':''}"><td class="n" style="font-weight:700">${l.lap}</td><td class="n ${tcls} ${l.valid?'':'inv'}" style="font-weight:700">${ft(l.time)}</td>${sec('s1')}${sec('s2')}${sec('s3')}
+    const sec=k=>`<td class="n ${l[k]===sb[k]&&counts(l)?'t-green':''}">${l[k]?l[k].toFixed(3):'–'}</td>`;
+    return `<tr class="${l.pit?'pit':''}"><td class="n" style="font-weight:700">${l.lap}</td><td class="n ${tcls} ${l.valid?'':'inv'}" style="font-weight:700" ${l.timed===false?'title="Not timed by the game"':''}>${l.timed===false?'~':''}${ft(l.time)}</td>${sec('s1')}${sec('s2')}${sec('s3')}
       <td class="n">P${l.position??'–'}</td><td>${tyre(l.tyre,true)} <span class="muted num">${l.tyre_age??''}</span></td>
       <td class="n">${l.wear_avg??'–'}%</td><td class="n">${l.fuel_start!=null?l.fuel_start.toFixed(1):'–'}<span class="dev">${l.fuel_used!=null?'−'+l.fuel_used.toFixed(2):''}</span></td><td>${esc(l.mix||'–')}</td>
       <td class="n" title="Deployed most at: ${esc((l.deploy_where||[]).join(', '))}">${l.ers_deployed_mj??'–'}<span class="dev">${l.deploy_pct!=null?l.deploy_pct+'% of lap':''}</span></td>
