@@ -64,6 +64,10 @@ header .btn:hover{border-color:var(--nav-ink)}
 .btn.small{font-size:13px;padding:3px 11px}
 .btn[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
 kbd{font:600 11px var(--font);border:1px solid rgba(255,255,255,.5);border-radius:4px;padding:0 5px;margin-left:6px}
+.views{display:inline-flex;gap:2px;background:var(--nav-2);padding:3px;border-radius:var(--r-sm)}
+.views button{border:0;background:transparent;color:var(--nav-muted);padding:4px 12px;font-weight:600;font-size:14px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.views button:hover{color:var(--nav-ink)}
+.views button[aria-pressed="true"]{background:var(--page);color:var(--ink)}
 
 /* connected games strip */
 .feeds{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding-block:10px;border-bottom:1px solid var(--line)}
@@ -205,6 +209,60 @@ tr.pit td{background:#eef3fd!important}
 .legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--muted);padding:10px 16px}
 .legend b{font-weight:700}
 
+/* ---------------- race engineer ---------------- */
+#engTabs{margin-bottom:2px}
+.eng{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){.eng{grid-template-columns:minmax(0,1fr)}}
+.eng-col{display:grid;gap:16px;min-width:0}
+.brief .body{padding:14px 16px}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--red)}
+.headline{font-size:26px;font-weight:700;line-height:1.15;margin-top:2px;text-wrap:balance}
+.brief p{margin:6px 0 0;color:var(--ink-2);max-width:70ch}
+.calls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;border-top:1px solid var(--line)}
+.calls>div{padding:12px 16px;min-width:0}
+.calls>div+div{border-left:1px solid var(--line)}
+.calls dt{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.calls dd{margin:2px 0 0;font-weight:700;font-size:16px}
+@media (max-width:620px){.calls{grid-template-columns:minmax(0,1fr)}.calls>div+div{border-left:0;border-top:1px solid var(--line)}}
+.gauge{padding:14px 16px 16px}
+.gscale{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.gtrack{position:relative;height:12px;background:var(--card-2);border-radius:6px;overflow:hidden}
+.gtrack .mid{position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--ink-2);z-index:1}
+.gtrack .fill{position:absolute;top:0;bottom:0}
+.fill.os{background:var(--red)}.fill.us{background:var(--amber)}
+.bal{font-weight:700;margin-left:auto}.bal.os{color:var(--red)}.bal.us{color:var(--amber)}.bal.ok{color:var(--green)}
+.issue{display:grid;grid-template-columns:4px minmax(0,1fr);gap:12px;padding:10px 16px 10px 0;border-top:1px solid var(--line)}
+.issue .s{border-radius:0 2px 2px 0;background:var(--blue)}
+.issue.danger .s{background:var(--red)}.issue.warning .s{background:var(--amber)}
+.issue b{display:block;font-size:14px}.issue span{font-size:13px;color:var(--ink-2)}
+.fbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;padding:12px 16px 16px}
+.fb{border:1px solid var(--line-2);background:var(--page);border-radius:var(--r-sm);padding:9px 12px;text-align:left;cursor:pointer;display:grid;gap:2px;align-content:start}
+.fb:hover{border-color:var(--ink)}
+.fb b{font-size:14px;line-height:1.25}.fb span{font-size:12.5px;color:var(--muted);line-height:1.35}
+.fb[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.fb[aria-pressed="true"] span{color:#c9c9d4}
+.recrow{padding:12px 16px;border-top:1px solid var(--line);display:grid;gap:6px}
+.rectop{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.rectop .l{font-weight:700;font-size:15px}
+.change{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.change .to{font-weight:700;font-size:17px}
+.dchip{font-weight:700;font-size:12.5px;padding:0 8px;line-height:20px;border-radius:999px;background:var(--card-2)}
+.recrow p{margin:0;font-size:13.5px;color:var(--ink-2)}
+.ok-state{padding:18px 16px;display:grid;gap:4px}
+.msgbox{padding:28px 0;display:grid;gap:10px;max-width:720px}
+.msgbox h3{font-size:24px}
+.msgbox p{margin:0;color:var(--ink-2)}
+.tyres4{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:12px 16px 16px}
+.tc{background:var(--page);border-radius:var(--r-sm);padding:10px 12px;display:grid;gap:3px;border-top:4px solid var(--line-2);min-width:0}
+.tc.cold{border-top-color:var(--blue)}.tc.ok{border-top-color:var(--green)}.tc.warm{border-top-color:var(--amber)}.tc.hot{border-top-color:var(--red)}
+.tc .corner{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.tc .core{font-size:26px;font-weight:700;line-height:1.1}
+.bt.cold{color:var(--blue)}.bt.ok{color:var(--green)}.bt.warm{color:var(--amber)}.bt.hot{color:var(--red)}
+table.sheet td,table.sheet th{padding:6px 16px}
+table.sheet tr.grp th{background:var(--card-2);padding-top:8px}
+table.sheet tr.chg td{background:#eaf6ef}
+table.sheet tr.chg td:last-child{color:var(--green)}
+
 /* ---------------- empty / dialog / toast ---------------- */
 .empty{padding:56px 0;display:grid;gap:14px;justify-items:start;max-width:760px}
 .empty h2{font-size:36px}
@@ -224,7 +282,7 @@ dialog pre{margin:0;padding:18px;white-space:pre-wrap;font:12.5px/1.55 ui-monosp
   <div class="race" id="raceInfo"><span class="muted up">Waiting for telemetry</span></div>
   <div class="actions">
     <span class="rec" id="rec">IDLE</span>
-    <button class="btn" id="viewBtn" type="button">Sessions</button>
+    <nav class="views" id="views" aria-label="Views"><button type="button" data-view="live" aria-pressed="true">Pit wall</button><button type="button" data-view="engineer" aria-pressed="false">Engineer</button><button type="button" data-view="sessions" aria-pressed="false">Sessions</button></nav>
     <button class="btn red" id="flagBtn" type="button" title="Save the last 20 s and the next 10 s as an incident">Flag incident<kbd>F</kbd></button>
   </div>
 </header>
@@ -279,6 +337,14 @@ dialog pre{margin:0;padding:18px;white-space:pre-wrap;font:12.5px/1.55 ui-monosp
     </section>
     <div class="log" id="log"></div>
   </div>
+</main>
+
+<main id="engineerView" class="hidden">
+  <section class="block">
+    <div class="shead"><h2>Race engineer</h2><p>Setup advice for one driver, worked out from their own car's telemetry and how the car feels to them. Pick yourself; this device remembers.</p></div>
+    <div class="tabs" id="engTabs" role="tablist"></div>
+    <div id="engBody"></div>
+  </section>
 </main>
 
 <main id="sessionsView" class="hidden">
@@ -337,6 +403,7 @@ function render(){
   if(s&&s.ended&&s.id)b.push(`<div class="banner fin"><b>Session complete</b><span class="muted">Summary saved.</span><span class="spacer"></span><button class="btn small" type="button" data-act="openSummary" data-id="${esc(s.id)}">View summary</button></div>`);
   if(s&&stale&&!s.ended)b.push(`<div class="banner"><b>No telemetry for ${Math.round(a.last_packet_age)}s</b><span class="muted">Paused, in the menus, or the connection dropped.</span></div>`);
   $('banners').innerHTML=b.join('');
+  if(view==='engineer')renderEngineer();
   if(!s)return;
   const race=s.kind==='race';
   $('raceSection').classList.toggle('hidden',!race);$('tsSection').classList.toggle('hidden',race);
@@ -559,9 +626,140 @@ async function openSummary(id){
   $('sessDetail').scrollIntoView({behavior:'smooth',block:'start'});
 }
 function showView(v){
-  $('liveView').classList.toggle('hidden',v!=='live');$('sessionsView').classList.toggle('hidden',v!=='sessions');
-  $('viewBtn').textContent=v==='live'?'Sessions':'Live';if(v==='sessions')loadSessions();
-  try{history.replaceState(null,'',v==='live'?location.pathname:'#sessions');}catch(e){}
+  view=v;
+  for(const[k,id]of[['live','liveView'],['engineer','engineerView'],['sessions','sessionsView']])$(id).classList.toggle('hidden',v!==k);
+  document.querySelectorAll('#views [data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===v)));
+  if(v==='sessions')loadSessions();
+  setHash();connect();render();
+}
+function setHash(){try{history.replaceState(null,'',view==='live'?location.pathname:view==='sessions'?'#sessions':'#engineer'+(engName?'/'+encodeURIComponent(engName):''));}catch(e){}}
+function fromHash(){const h=location.hash;if(h==='#sessions')return['sessions'];if(h.startsWith('#engineer'))return['engineer',decodeURIComponent(h.slice(10))||null];return['live'];}
+
+/* ================= race engineer ================= */
+// One driver's engineer page. The stream carries that driver's analysis with this viewer's handling
+// feedback applied; the feedback is kept on this device, per driver and track.
+let view='live',engName=null,engFb=[],fbFor=null,engState=null,speaking=false;
+try{engName=localStorage.getItem('pw.engineer')||null;}catch(e){}
+const engCache={};
+function put(id,html){const el=$(id);if(!el||engCache[id]===html)return;engCache[id]=html;el.innerHTML=html;}
+function fbKey(){return `pw.fb.${(engName||'').toLowerCase()}.${S&&S.session?S.session.track_id:''}`;}
+function pickDriver(name){engName=name;try{localStorage.setItem('pw.engineer',name);}catch(e){}fbFor=null;engFb=[];setHash();connect();render();}
+function setFb(list){engFb=list;try{localStorage.setItem(fbKey(),JSON.stringify(list));}catch(e){}connect();renderEngineer();}
+const fmtv=v=>v==null?'–':String(v);
+const unitS=u=>u==='clicks'?'':u==='deg'?'°':u==='PSI'?' psi':u;
+const SHEET=[['Aerodynamics',[['frontWing','Front wing',''],['rearWing','Rear wing','']]],
+  ['Transmission',[['onThrottleDiff','Diff on throttle','%'],['offThrottleDiff','Diff off throttle','%']]],
+  ['Suspension geometry',[['frontCamber','Front camber','°'],['rearCamber','Rear camber','°'],['frontToe','Front toe','°'],['rearToe','Rear toe','°']]],
+  ['Suspension',[['frontSuspension','Front suspension',''],['rearSuspension','Rear suspension',''],['frontAntiRollBar','Front anti-roll bar',''],['rearAntiRollBar','Rear anti-roll bar',''],['frontRideHeight','Front ride height',''],['rearRideHeight','Rear ride height','']]],
+  ['Brakes',[['brakePressure','Brake pressure','%'],['brakeBias','Brake bias','%']]],
+  ['Tyre pressures',[['frontLeftTyrePressure','Front left',' psi'],['frontRightTyrePressure','Front right',' psi'],['rearLeftTyrePressure','Rear left',' psi'],['rearRightTyrePressure','Rear right',' psi']]]];
+const ENG_READY=`<div class="eng"><div class="eng-col"><div class="panel brief" id="eBrief"></div><div class="panel" id="eBal"></div><div class="panel" id="eFb"></div><div class="panel" id="eRecs"></div></div>
+  <div class="eng-col"><div class="panel" id="eTyres"></div><div class="panel" id="eSheet"></div><div class="panel" id="eDiag"></div></div></div>`;
+
+function renderEngineer(){
+  const roster=(S&&S.roster)||[],E=S&&S.engineer,me=(engName||'').toLowerCase();
+  put('engTabs',roster.map(d=>`<button class="tab" role="tab" type="button" style="--tc:${d.color}" aria-selected="${d.name.toLowerCase()===me}" data-eng="${esc(d.name)}">${esc(d.name)}${d.own?'':'<span class="muted" style="font-weight:400">· not streaming</span>'}</button>`).join(''));
+  if(S&&S.session&&engName&&fbFor!==fbKey()){   // this driver's saved feedback for this track
+    fbFor=fbKey();let saved=[];try{saved=JSON.parse(localStorage.getItem(fbFor)||'[]');}catch(e){}
+    if(saved.join()!==engFb.join()){engFb=saved;connect();}
+  }
+  const state=!S||!S.session?'nosession':!engName?'pick':!E||E.driver.toLowerCase()!==me?'loading':!E.found?'absent':!E.own?'notown':!E.car||!E.car.setup?'nosetup':E.analysis?'ready':'error';
+  if(state!==engState){engState=state;for(const k in engCache)if(k!=='engTabs')delete engCache[k];$('engBody').innerHTML=state==='ready'?ENG_READY:'<div class="msgbox" id="engMsg"></div>';}
+  const host=location.hostname,port=(S&&S.app&&S.app.udp_port)||20777,who=esc(engName||'');
+  const msg={
+    nosession:`<h3>Waiting for telemetry</h3><p>The engineer starts once a session is running and your game is sending telemetry to ${esc(host)}, port ${port}.</p>`,
+    pick:`<h3>Who's driving?</h3><p>${roster.length?'Pick your name above.':'No human drivers in this session yet.'} Each driver gets their own setup advice from their own car's telemetry.</p>`,
+    loading:'<p class="muted">Connecting…</p>',
+    absent:`<h3>${who} isn't in this session</h3><p>Pick your name above. Names come from the game, so they match your online name.</p>`,
+    notown:`<h3>${who}'s game isn't sending telemetry here</h3><p>The engineer needs your own car's data: wheel slip, suspension and setup only go to your own game. In F1 2020, <b>Game Options → Settings → Telemetry Settings</b>: UDP Telemetry <b>On</b>, UDP IP Address <b>${esc(host)}</b>, Port <b>${port}</b>, Format <b>2020</b>.</p>`,
+    nosetup:`<h3>Waiting for ${who}'s setup</h3><p>Telemetry is coming in. The game sends the car setup every few seconds while you're on track; the advice appears as soon as it does.</p>`,
+    error:`<h3>No analysis</h3><p>${esc(E&&E.error||'')}</p>`,
+  };
+  if(state!=='ready'){put('engMsg',msg[state]);return;}
+  const A=E.analysis,b=A.briefing,C=E.car,T=C.telemetry;
+  put('eBrief',`<div class="phead"><span class="teambar" style="--tc:${E.color}"></span><h3>${esc(E.name)}</h3><span class="sub">${esc(E.team)} · ${esc(b.sessionLabel)}</span><span class="spacer"></span>
+      <button class="btn small" type="button" data-act="radio" aria-pressed="${speaking}">${speaking?'Stop radio':'Play radio'}</button></div>
+    <div class="body"><div class="eyebrow">Engineer priority</div><div class="headline">${esc(b.headline)}</div><p>${esc(b.rationale)}</p></div>
+    <dl class="calls"><div><dt>${esc(b.pitLabel)}</dt><dd>${esc(b.pitCall)}</dd></div><div><dt>Tyre call</dt><dd>${esc(b.tyreCall)}</dd></div><div><dt>Fuel mix</dt><dd>${esc(b.fuelCall)}</dd></div></dl>`);
+  const sc=A.balanceScore,bc=sc<-2?'os':sc>2?'us':'ok';
+  put('eBal',`<div class="phead"><h3>Balance</h3><span class="bal ${bc}">${esc(A.balanceLabel)} · ${sc>0?'+':''}${sc}</span></div>
+    <div class="gauge"><div class="gscale"><span>Oversteer −10</span><span>Neutral</span><span>Understeer +10</span></div>
+      <div class="gtrack" role="img" aria-label="Balance ${sc}, from −10 oversteer to +10 understeer"><i class="mid"></i>${sc?`<i class="fill ${sc<0?'os':'us'}" style="left:${sc<0?50+sc*5:50}%;width:${Math.abs(sc)*5}%"></i>`:''}</div></div>
+    ${A.diagnosedIssues.map(i=>`<div class="issue ${esc(i.severity)}"><span class="s"></span><div><b>${esc(i.title)}</b><span>${esc(i.description)}</span></div></div>`).join('')}`);
+  put('eFb',`<div class="phead"><h3>How does the car feel?</h3><span class="sub">Tick what you feel; the advice updates.</span>${engFb.length?'<span class="spacer"></span><button class="btn small" type="button" data-act="fbclear">Clear</button>':''}</div>
+    <div class="fbgrid">${E.options.map(o=>`<button class="fb" type="button" data-fb="${esc(o.id)}" aria-pressed="${engFb.includes(o.id)}" title="Likely cause: ${esc(o.symptom)}"><b>${esc(o.label)}</b><span>${esc(o.description)}</span></button>`).join('')}</div>`);
+  const recs=A.recommendations;
+  put('eRecs',`<div class="phead"><h3>Setup changes</h3><span class="sub">${recs.length?recs.length+' suggested, most important first':'none needed'}</span></div>
+    ${recs.length?recs.map(r=>`<div class="recrow"><div class="rectop"><span class="tag">${esc(r.category)}</span><span class="l">${esc(r.label)}</span><span class="tag ${r.priority==='High'?'red':r.priority==='Medium'?'amber':''}">${esc(r.priority)}</span>
+      <span class="change"><span class="muted">${fmtv(r.currentValue)}</span>→<span class="to">${fmtv(r.recommendedValue)}${esc(unitS(r.unit))}</span><span class="dchip">${r.delta>0?'+':''}${fmtv(r.delta)}</span></span></div><p>${esc(r.reason)}</p></div>`).join('')
+    :`<div class="ok-state"><b>Car setup is currently optimal</b><span class="muted">Telemetry shows balanced tyre temperatures and no excessive wheel slip for ${esc(C.session.trackName)}.</span></div>`}`);
+  const core=t=>t<88?'cold':t<=104?'ok':t<=109?'warm':'hot',brk=t=>t<250?'cold':t<650?'ok':t<850?'warm':'hot',W=C.damage.tyresWear;
+  const tc=(k,l)=>`<div class="tc ${core(T.tyresInnerTemperature[k])}"><span class="corner">${l}</span><span class="core num">${T.tyresInnerTemperature[k]}°</span>
+    <span class="sub num">surface ${T.tyresSurfaceTemperature[k]}° · ${Number(T.tyresPressure[k]).toFixed(1)} psi</span><span class="sub num">wear ${W[k]}% · brake <b class="bt ${brk(T.brakesTemperature[k])}">${T.brakesTemperature[k]}°</b></span></div>`;
+  put('eTyres',`<div class="phead"><h3>Tyres &amp; brakes</h3><span class="sub">${esc(C.status.tyreCompound)}${C.status.tyresAgeLaps!=null?' · '+C.status.tyresAgeLaps+' laps old':''} · core 95–104° is the window</span></div>
+    <div class="tyres4">${tc('fl','Front left')}${tc('fr','Front right')}${tc('rl','Rear left')}${tc('rr','Rear right')}</div>`);
+  const cur=C.setup,tgt=A.targetSetup;
+  put('eSheet',`<div class="phead"><h3>Setup sheet</h3><span class="sub">Current → engineer's</span><span class="spacer"></span><button class="btn small" type="button" data-act="copySetup">Copy setup</button></div>
+    <table class="sheet"><tbody>${SHEET.map(([g,rows])=>`<tr class="grp"><th colspan="3">${g}</th></tr>`+rows.map(([k,l,u])=>`<tr class="${cur[k]!==tgt[k]?'chg':''}"><td>${l}</td><td class="n muted">${fmtv(cur[k])}${u}</td><td class="n"><b>${fmtv(tgt[k])}${u}</b></td></tr>`).join('')).join('')}</tbody></table>`);
+  const d=C.diagnostics,it=T.tyresInnerTemperature,fa=(it.fl+it.fr)/2,ra=(it.rl+it.rr)/2;
+  const lapRows=C.recentLaps.slice().reverse().map(l=>`<tr><td class="n">${l.lapNumber}</td><td class="n ${l.isValid?'':'inv'}">${ft(l.lapTime)}</td><td class="n">${l.oversteerEvents}</td><td class="n">${l.understeerEvents}</td><td class="n">${Math.max(...Object.values(l.tyreWearDelta)).toFixed(1)}</td></tr>`).join('');
+  put('eDiag',`<div class="phead"><h3>What the telemetry shows</h3></div>
+    <div class="sgroup"><dl class="kv"><dt>Oversteer samples, this lap</dt><dd class="num">${d.oversteerEvents}</dd><dt>Understeer samples, this lap</dt><dd class="num">${d.understeerEvents}</dd>
+      <dt>Front locking samples, session</dt><dd class="num">${d.frontLockingEvents.toLocaleString()}</dd><dt>Kerb / bottoming samples, session</dt><dd class="num">${d.kerbBottomingEvents.toLocaleString()}</dd>
+      <dt>Core temperature front / rear</dt><dd class="num">${Math.round(fa)}° / ${Math.round(ra)}°</dd><dt>Laps logged</dt><dd class="num">${C.laps} (${C.validLaps} valid)</dd></dl></div>
+    ${lapRows?`<div class="scroll"><table><thead><tr><th class="n">Lap</th><th class="n">Time</th><th class="n">Oversteer</th><th class="n">Understeer</th><th class="n">Wear +%</th></tr></thead><tbody>${lapRows}</tbody></table></div>`:''}
+    <div class="legend">Samples are counted on every telemetry packet from your own game, as the original race engineer did. Balance uses this lap's oversteer and understeer; locking and kerb samples build up over the session.</div>`);
+}
+
+function setupText(E){
+  const s=E.analysis.targetSetup;
+  return `=== F1 2020 CAR SETUP (${E.car.session.trackName}) ===
+Driver: ${E.name}
+[AERODYNAMICS]
+Front Wing Aero: ${s.frontWing}
+Rear Wing Aero: ${s.rearWing}
+
+[TRANSMISSION]
+Differential On-Throttle: ${s.onThrottleDiff}%
+Differential Off-Throttle: ${s.offThrottleDiff}%
+
+[SUSPENSION GEOMETRY]
+Front Camber: ${s.frontCamber}°
+Rear Camber: ${s.rearCamber}°
+Front Toe: ${s.frontToe}°
+Rear Toe: ${s.rearToe}°
+
+[SUSPENSION]
+Front Suspension: ${s.frontSuspension}
+Rear Suspension: ${s.rearSuspension}
+Front Anti-Roll Bar: ${s.frontAntiRollBar}
+Rear Anti-Roll Bar: ${s.rearAntiRollBar}
+Front Ride Height: ${s.frontRideHeight}
+Rear Ride Height: ${s.rearRideHeight}
+
+[BRAKES]
+Brake Pressure: ${s.brakePressure}%
+Front Brake Bias: ${s.brakeBias}%
+
+[TYRE PRESSURES]
+Front Left / Right: ${s.frontLeftTyrePressure} PSI
+Rear Left / Right: ${s.rearLeftTyrePressure} PSI
+======================================================`;
+}
+async function copyText(text,ok){
+  // navigator.clipboard only exists on https or localhost; other drivers open the page over plain http
+  try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);toast(ok);return;}}catch(e){}
+  const ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();
+  let done=false;try{done=document.execCommand('copy');}catch(e){}ta.remove();toast(done?ok:'Could not copy on this browser');
+}
+function radio(){
+  const A=S&&S.engineer&&S.engineer.analysis;
+  if(!('speechSynthesis' in window)){toast('This browser cannot speak');return;}
+  if(speaking){speechSynthesis.cancel();speaking=false;renderEngineer();return;}
+  if(!A)return;
+  const u=new SpeechSynthesisUtterance(A.radioMessage);u.rate=1.05;u.pitch=0.95;   // the original's radio voice
+  u.onend=u.onerror=()=>{speaking=false;renderEngineer();};
+  speaking=true;speechSynthesis.speak(u);renderEngineer();
 }
 
 /* ================= events ================= */
@@ -576,17 +774,30 @@ document.addEventListener('click',async ev=>{
   else if(t.dataset.del){if(await post('/api/delete-raw',{session:t.dataset.del})){toast('Raw data deleted');setTimeout(loadSessions,800);}}
   else if(t.dataset.act==='keepPending'){if(await post('/api/keep-all-pending'))toast('Earlier raw data will be kept');}
   else if(t.dataset.act==='openSummary')openSummary(t.dataset.id);
+  else if(t.dataset.view)showView(t.dataset.view);
+  else if(t.dataset.eng)pickDriver(t.dataset.eng);
+  else if(t.dataset.fb){const id=t.dataset.fb;setFb(engFb.includes(id)?engFb.filter(x=>x!==id):[...engFb,id]);}
+  else if(t.dataset.act==='fbclear')setFb([]);
+  else if(t.dataset.act==='radio')radio();
+  else if(t.dataset.act==='copySetup'&&S&&S.engineer&&S.engineer.analysis)copyText(setupText(S.engineer),'Setup copied');
 });
-$('viewBtn').onclick=()=>showView($('liveView').classList.contains('hidden')?'live':'sessions');
 async function flag(){if(await post('/api/flag',{}))toast('Flagged. Saving 20 s before and 10 s after.');}
 $('flagBtn').onclick=flag;
 document.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='f'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&!$('dlg').open){e.preventDefault();flag();}});
 
-function connect(){const es=new EventSource('/api/stream');es.onmessage=m=>{try{S=JSON.parse(m.data);render();}catch(e){}};
-  es.onerror=()=>{es.close();$('rec').className='rec';$('rec').textContent='RECONNECTING';setTimeout(connect,2000);};}
-fetch('/api/state').then(r=>r.json()).then(j=>{S=j;render();}).catch(()=>{});
-connect();
-if(location.hash==='#sessions')showView('sessions');
+// One live stream per tab. On the engineer page it also carries that driver's analysis, so it is
+// reopened whenever the driver or their handling feedback changes.
+let es=null,esUrl='';
+function streamUrl(){return view==='engineer'&&engName?`/api/stream?engineer=${encodeURIComponent(engName)}${engFb.length?'&fb='+engFb.join(','):''}`:'/api/stream';}
+function connect(){
+  const u=streamUrl();if(es&&esUrl===u)return;
+  if(es)es.close();esUrl=u;const me=es=new EventSource(u);
+  me.onmessage=m=>{try{S=JSON.parse(m.data);render();}catch(e){}};
+  me.onerror=()=>{me.close();if(es!==me)return;es=null;$('rec').className='rec';$('rec').textContent='RECONNECTING';setTimeout(connect,2000);};
+}
+fetch('/api/state').then(r=>r.json()).then(j=>{if(!S)S=j;render();}).catch(()=>{});
+{const[v,n]=fromHash();if(n)engName=n;showView(v);}
+window.addEventListener('hashchange',()=>{const[v,n]=fromHash();if(n&&n!==engName)pickDriver(n);showView(v);});
 </script>
 </body>
 </html>

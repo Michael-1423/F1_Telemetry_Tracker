@@ -23,6 +23,11 @@ the race happens, saves an incident package around every collision, and writes a
   Every lap driven is listed, including out laps and laps abandoned into the pits. The game doesn't count or
   time these, so the tracker numbers the laps itself and measures their times (shown with ~).
   Only the summary and event log are saved; no raw data and no incident packages.
+- **Race engineer** (the *Engineer* tab, one page per driver): setup advice from the driver's own car. It
+  detects oversteer, understeer, front locking and kerb strikes from their telemetry, takes how the car
+  feels to them (tick boxes such as *Oversteer on corner exit*), and suggests setup clicks with the
+  reasons, plus a full setup sheet to copy and a run / pit / tyre / fuel call for the session. This is the
+  F1 2020 AI Race Engineer's logic, ported unchanged (see below).
 - **Corners cut vs running wide**: every excursion with 2+ wheels beyond the kerbs is classed by which side
   of the car left the track first compared with the way the driver is steering: inside wheels = a cut,
   outside wheels = running wide. Useful when the game's corner cutting is set to lenient.
@@ -60,9 +65,14 @@ No dependencies beyond Python 3.11+.
    Each driver who streams gets full-resolution data for their own car (inputs, wheel slip, setup). Drivers
    who don't stream are still tracked through the other players' games, at lower resolution.
 
-3. Race. Press **F** (or the Flag incident button) to save the last 20 s and next 10 s by hand.
+3. **Practice:** each driver opens `http://<recording computer>:8020/#engineer`, picks their name and keeps
+   that page open (the link becomes `.../#engineer/<name>`, so it can be bookmarked). Work through the
+   setup changes, tick what the car feels like, and use **Copy setup** for the garage. **Qualifying and
+   race:** everyone watches the *Pit wall* tab.
 
-4. Stop with **Ctrl+C**. The session is finalised automatically 90 s after the last packet in any case.
+4. Race. Press **F** (or the Flag incident button) to save the last 20 s and next 10 s by hand.
+
+5. Stop with **Ctrl+C**. The session is finalised automatically 90 s after the last packet in any case.
 
 ### Keeping raw data
 
@@ -79,6 +89,30 @@ python -m f1live sessions                 # list sessions, sizes and what's kept
 ```
 
 The Sessions page on the dashboard can do the same, and can delete a session's raw data and incidents straight away.
+
+## Race engineer
+
+The engineer comes from the F1 2020 AI Race Engineer app. `f1live/engineer.py` is a line-by-line port
+of its relay's detectors (`relay/f1_relay.py`) and its setup engine (`src/lib/engineer_engine.ts` and
+`strategy.ts`), with the same thresholds, rules and wording. `tests/test_engineer.py` checks the port
+against outputs of the original TypeScript.
+
+- It only works for drivers whose game sends telemetry to the recording computer: wheel slip,
+  suspension and the car setup only go to a driver's own game. The page says so when that's missing,
+  and waits for the setup to arrive before advising.
+- The handling boxes a driver ticks stay in that browser, per driver and track, like in the original
+  app. Two people can look at the same driver with different boxes ticked.
+- The counters are per telemetry packet, as in the original. Oversteer and understeer restart each lap;
+  front locking and kerb strikes add up over the session.
+- Differences from the original relay, all in what it read from the game: a lap's validity is the game's
+  flag for that lap (the relay's parser was laid out for F1 2021 and read the wrong byte), and the
+  all-zero setup the game sends after a car retires or finishes is ignored.
+- The detector thresholds can be changed under `[engineer]` in the config. F1 2020 reports suspension
+  position in millimetres, so the original kerb threshold of 0.08 counts nearly every sample as a kerb
+  hit, and the engine always suggests softer front springs and more ride height (when not already at its
+  limits). The default keeps the original value.
+
+`GET /api/engineer?driver=<name>&fb=oversteer_exit,front_locking` returns one driver's analysis as JSON.
 
 ## Reviewing incidents with an LLM
 
@@ -103,6 +137,7 @@ python -m f1live replay f1_telemetry_capture.jsonl --speed max --no-server --rec
 python -m f1live send <recording> --to <tracker IP>:20777 --speed 1
                                            # test race-night setup: replays over UDP, one socket per driver
 python tests/test_packets.py               # decoder check against the f1_2020_telemetry library, if installed
+python tests/test_engineer.py              # race engineer port against the original's outputs
 ```
 
 ## Files
@@ -126,6 +161,7 @@ windows, detector thresholds, driver display names, and corner names for tracks 
 
 - `f1live/packets.py` is a dependency-free F1 2020 decoder, checked field by field against the reference library.
 - `f1live/model.py` merges the feeds into one session state and runs the detectors. Each car is read from its own driver's game when available, otherwise from one stable primary game.
+- `f1live/engineer.py` is the race engineer: one detector per driver, fed by their own game, and the setup engine.
 - `f1live/incidents.py` keeps a rolling buffer, merges overlapping triggers, and writes the packages.
 - `f1live/summary.py` builds the dashboard snapshot and the end-of-session summary.
 - `f1live/storage.py` handles session folders, the raw recorder and reader, and retention.

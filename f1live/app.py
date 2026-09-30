@@ -10,6 +10,7 @@ import threading
 import time
 from typing import Iterable
 
+from . import engineer as ENG
 from . import packets as P
 from .incidents import IncidentRecorder
 from .model import Session
@@ -56,6 +57,7 @@ class Pipeline:
         self.detail_version = 0
         self._detail_sig = None
         self.snapshot_version = 0
+        self.engineer_inputs: dict[str, dict] = {}   # lower-case driver name -> race engineer input
         self.cond = threading.Condition()
         self.stats = {"packets": 0, "bad": 0, "other_format": 0, "started": time.time()}
         self.last_packet_wall = 0.0
@@ -245,10 +247,13 @@ class Pipeline:
                 self.detail_bytes = json.dumps(driver_detail(s), default=_default, separators=(",", ":")).encode()
                 self.detail_version += 1
         extra["app"]["detail_version"] = self.detail_version
+        roster, engineer_inputs = ENG.inputs(s) if s is not None else ([], {})
+        extra["roster"] = roster
         snap = snapshot(s, ctx.recorder.done if ctx else [], extra)
         data = json.dumps(snap, default=_default, separators=(",", ":")).encode()
         with self.cond:
             self.snapshot_bytes = data
+            self.engineer_inputs = engineer_inputs
             self.snapshot_version += 1
             self.cond.notify_all()
 
