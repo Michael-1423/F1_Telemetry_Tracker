@@ -66,9 +66,9 @@ def blank(pid: int, st: float = 0.0, player: int = 0) -> dict:
     return p
 
 
-def motion(slip, susp=(0.0, 0.0, 0.0, 0.0), glat=0.0):
+def motion(slip, susp_v=(0.0, 0.0, 0.0, 0.0), glat=0.0):
     p = blank(P.MOTION)
-    p["wheelSlip"], p["suspensionPosition"] = list(slip), list(susp)
+    p["wheelSlip"], p["suspensionVelocity"] = list(slip), list(susp_v)
     p["carMotionData"][0]["gForceLateral"] = glat
     return p
 
@@ -79,8 +79,8 @@ def test_detector_counts():
     f.feed(motion((0.30, 0.10, 0.25, 0.05)), 0)                  # rear not 1.5x the front: nothing
     f.feed(motion((0.05, 0.05, 0.30, 0.10), glat=-2.0), 0)       # front slip with 2 g: understeer
     f.feed(motion((0.05, 0.05, 0.30, 0.10), glat=1.0), 0)        # ...but not at 1 g
-    f.feed(motion((0, 0, 0, 0), susp=(0.05, -0.07, 0, 0)), 0)
-    f.feed(motion((0, 0, 0, 0), susp=(0, 0, -0.09, 0)), 0)       # |0.09| > 0.08: kerb
+    f.feed(motion((0, 0, 0, 0), susp_v=(900.0, -950.0, 0, 0)), 0)
+    f.feed(motion((0, 0, 0, 0), susp_v=(0, 0, -1200.0, 0)), 0)   # |1200| mm/s > 1000: kerb strike
     d = f.snapshot("x", {})["diagnostics"]
     assert (d["oversteerEvents"], d["understeerEvents"], d["kerbBottomingEvents"]) == (1, 1, 1), d
 
@@ -115,6 +115,63 @@ def test_lap_records_and_resets():
     assert l1["tyreWearDelta"] == {"fl": 6, "fr": 7, "rl": 4, "rr": 5}
     assert l1["tyreCompound"] == "Medium" and l1["oversteerEvents"] == 1
     assert snap["diagnostics"]["oversteerEvents"] == 0  # per-lap counters restart
+
+
+def test_kerb_strikes_count_over_a_lap():
+    f = E.EngineerFeed()
+    lap = blank(P.LAP)
+    ld = lap["lapData"][0]
+    kerbs = lambda: f.snapshot("x", {})["diagnostics"]["kerbBottomingEvents"]
+    ld.update(currentLapNum=1)
+    f.feed(lap, 0)
+    for _ in range(5):
+        f.feed(motion((0, 0, 0, 0), susp_v=(0, 0, 1500.0, 0)), 0)
+    assert kerbs() == 5
+    ld.update(currentLapNum=2, lastLapTime=90.0)
+    f.feed(lap, 0)
+    assert kerbs() == 5 and f.completed_laps[-1]["kerbEvents"] == 5   # still shown through the next lap
+    f.feed(motion((0, 0, 0, 0), susp_v=(0, 0, 1500.0, 0)), 0)
+    assert kerbs() == 5
+    ld.update(currentLapNum=3, lastLapTime=90.0)
+    f.feed(lap, 0)
+    assert kerbs() == 1                                                # a clean lap clears it
+    analysis = E.analyze(dict(f.snapshot("x", {"sessionType": "Practice 1", "sessionTypeId": 1}),
+                              setup={k: 5 for k in ("frontWing", "rearWing", "onThrottleDiff", "offThrottleDiff",
+                                                    "frontAntiRollBar", "rearAntiRollBar", "frontSuspension",
+                                                    "frontRideHeight", "rearRideHeight", "brakeBias")}
+                              | {"rearToe": 0.3, "frontLeftTyrePressure": 23.0, "rearLeftTyrePressure": 21.0}))
+    assert not any(i["title"].startswith("Chassis Bottoming") for i in analysis["diagnosedIssues"])
+
+
+def test_setup_change_restarts_the_evidence():
+    """Bottomed out, raised the ride height as advised: the engine must not ask for +1 again straight away."""
+    f = E.EngineerFeed()
+    su = blank(P.SETUPS)
+    base = dict(frontWing=7, rearWing=7, onThrottle=60, offThrottle=55, frontCamber=-3.0, rearCamber=-1.5,
+                frontToe=0.05, rearToe=0.3, frontSuspension=3, rearSuspension=3, frontAntiRollBar=5,
+                rearAntiRollBar=5, frontSuspensionHeight=3, rearSuspensionHeight=4, brakePressure=95,
+                brakeBias=55, frontLeftTyrePressure=23.0, frontRightTyrePressure=23.0, rearLeftTyrePressure=21.0,
+                rearRightTyrePressure=21.0, ballast=5, fuelLoad=20.0)
+    su["carSetups"][0].update(base)
+    f.feed(su, 0)
+    lap = blank(P.LAP)
+    lap["lapData"][0].update(currentLapNum=1)
+    f.feed(lap, 0)
+    for _ in range(5):
+        f.feed(motion((0, 0, 0, 0), susp_v=(0, 0, 1500.0, 0)), 0)
+    sess = {"sessionType": "Practice 1", "sessionTypeId": 1}
+    rec = {r["parameter"]: r for r in E.analyze(f.snapshot("x", sess))["recommendations"]}
+    assert rec["frontRideHeight"]["recommendedValue"] == 4
+
+    su["carSetups"][0].update(fuelLoad=18.5)                  # fuel isn't a setup change
+    f.feed(su, 0)
+    assert f.setup_changed_lap is None and f.snapshot("x", sess)["diagnostics"]["kerbBottomingEvents"] == 5
+
+    su["carSetups"][0].update(frontSuspensionHeight=4, rearSuspensionHeight=5)   # took the advice
+    f.feed(su, 0)
+    a = E.analyze(f.snapshot("x", sess))
+    assert "frontRideHeight" not in {r["parameter"] for r in a["recommendations"]}
+    assert f.snapshot("x", sess)["setupChangedLap"] == 1
 
 
 def test_session_feeds_each_drivers_own_car():

@@ -92,7 +92,7 @@ section.block{margin-top:36px;display:grid;grid-template-columns:minmax(0,1fr);g
 
 /* ---------------- live driver rows ---------------- */
 .live{display:grid;gap:8px}
-.lrow,.lhead{display:grid;grid-template-columns:56px minmax(170px,1.3fr) 120px 150px 110px 200px 110px 124px 100px}
+.lrow,.lhead{display:grid;grid-template-columns:56px minmax(170px,1.3fr) 120px 150px 124px 110px 200px 110px 124px 100px}
 .lrow{align-items:stretch;background:var(--card);border-radius:var(--r);min-height:68px;overflow:hidden}
 .lhead{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .lhead div,.lrow>div{padding:10px 12px;display:flex;flex-direction:column;justify-content:center;gap:2px}
@@ -116,6 +116,9 @@ section.block{margin-top:36px;display:grid;grid-template-columns:minmax(0,1fr);g
 .wear4{display:grid;grid-template-columns:1fr 1fr;gap:2px;font-size:11.5px;width:62px}
 .wear4 span{background:#fff;text-align:center;line-height:16px;border-radius:3px}
 .wearcell{flex-direction:row!important;align-items:center;justify-content:space-between!important;gap:8px!important}
+.wing3{display:grid;grid-template-columns:1fr 1fr;gap:2px;font-size:11.5px;width:62px}
+.wing3 span{background:#fff;text-align:center;line-height:16px;border-radius:3px}
+.wing3 span:last-child{grid-column:1/-1}
 .mix{font-size:17px;font-weight:700}
 .mix.Rich,.mix.Max{color:var(--amber)}.mix.Lean{color:var(--ers)}
 .ers{display:grid;gap:5px}
@@ -133,16 +136,16 @@ section.block{margin-top:36px;display:grid;grid-template-columns:minmax(0,1fr);g
 .tl .big{font-size:24px}
 @media (max-width:1200px){
   .lhead{display:none}
-  .lrow{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"pos drv drv drv" "tyre wear mix ers" "last best tl tl"}
+  .lrow{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"pos drv drv drv" "tyre wear wing mix" "ers last best tl"}
   .lrow>div{border-left:0!important;border-top:1px solid var(--line)}
   .lrow>div:nth-child(1){grid-area:pos;border-top:0}.lrow>div:nth-child(2){grid-area:drv;border-top:0}.lrow>div:nth-child(3){grid-area:tyre}
-  .lrow>div:nth-child(4){grid-area:wear}.lrow>div:nth-child(5){grid-area:mix}.lrow>div:nth-child(6){grid-area:ers}
-  .lrow>div:nth-child(7){grid-area:last}.lrow>div:nth-child(8){grid-area:best}.lrow>div:nth-child(9){grid-area:tl}
+  .lrow>div:nth-child(4){grid-area:wear}.lrow>div:nth-child(5){grid-area:wing}.lrow>div:nth-child(6){grid-area:mix}.lrow>div:nth-child(7){grid-area:ers}
+  .lrow>div:nth-child(8){grid-area:last}.lrow>div:nth-child(9){grid-area:best}.lrow>div:nth-child(10){grid-area:tl}
   .lrow>div[data-l]::before{content:attr(data-l);font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
   .tyrecell,.wearcell,.tl{flex-wrap:wrap}
 }
 @media (max-width:620px){
-  .lrow{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"pos drv" "tyre wear" "mix ers" "last best" "tl tl"}
+  .lrow{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"pos drv" "tyre wear" "wing mix" "ers ers" "last best" "tl tl"}
 }
 
 /* ---------------- panels, feed & incidents ---------------- */
@@ -309,7 +312,7 @@ dialog pre{margin:0;padding:18px;white-space:pre-wrap;font:12.5px/1.55 ui-monosp
 
     <section class="block" id="raceSection">
       <div class="shead"><h2>Drivers</h2><p>Live car data for every human driver: what the in-game timing doesn't show.</p></div>
-      <div class="lhead" aria-hidden="true"><div>Pos</div><div>Driver</div><div>Tyre</div><div>Avg wear</div><div>Fuel mix</div><div>ERS</div><div>Last lap</div><div>Fastest lap</div><div title="All four wheels beyond the kerbs">4 wheels off</div></div>
+      <div class="lhead" aria-hidden="true"><div>Pos</div><div>Driver</div><div>Tyre</div><div>Avg wear</div><div title="Front wing damage, worst side; front-left, front-right / rear wing below">Wing damage</div><div>Fuel mix</div><div>ERS</div><div>Last lap</div><div>Fastest lap</div><div title="All four wheels beyond the kerbs">4 wheels off</div></div>
       <div class="live" id="live"></div>
     </section>
 
@@ -424,16 +427,17 @@ function renderLive(){
     if(d.state&&d.state!=='pit')tags.push(`<span class="tag ${out?'red':'white'}">${esc(d.state)}</span>`);
     if(d.penalties)tags.push(`<span class="tag red">+${d.penalties}s</span>`);
     if(d.warnings)tags.push(`<span class="tag amber">${d.warnings} warn</span>`);
-    const wing=Math.max(d.dmg.fl||0,d.dmg.fr||0,d.dmg.rw||0);if(wing>=10)tags.push(`<span class="tag red">Wing ${wing}%</span>`);
     if(d.invalid)tags.push('<span class="tag">Lap invalid</span>');
     const gap=d.pos===1?'Leader':d.laps_down?`+${d.laps_down} lap`:d.gap!=null?`+${d.gap.toFixed(1)}s`:'';
-    const w=d.wear||[];const wc=v=>v>=60?'t-red':v>=40?'t-yellow':'';
+    const w=d.wear||[];const wc=v=>v>=60?'t-red':v>=40?'t-yellow':'';const g=d.dmg||{};const dc=v=>v>=50?'t-red':v>=20?'t-yellow':'';
     return `<div class="lrow${out?' out':''}">
       <div class="pos num">${d.pos||'–'}</div>
       <div class="drv" style="--tc:${d.color}"><span class="n">${esc(d.name)}</span><span class="t">${esc(d.team)}${gap?' · '+gap:''}${d.own?'':' · via other game'}</span>${tags.length?`<span class="tags">${tags.join('')}</span>`:''}</div>
       <div class="tyrecell" data-l="Tyre">${tyre(d.tyre)}<div><div style="font-weight:700">${esc(String(d.tyre).split(' (')[0])}</div><div class="sub">${d.tyre_age==null?'–':d.tyre_age===1?'1 lap old':d.tyre_age+' laps old'}</div></div></div>
       <div class="wearcell" data-l="Avg wear"><span class="big num ${wc(d.wear_avg)}">${d.wear_avg??'–'}<span style="font-size:14px">%</span></span>
         ${w.length?`<div class="wear4 num" title="Front-left, front-right / rear-left, rear-right"><span class="${wc(w[0])}">${w[0]}</span><span class="${wc(w[1])}">${w[1]}</span><span class="${wc(w[2])}">${w[2]}</span><span class="${wc(w[3])}">${w[3]}</span></div>`:''}</div>
+      <div class="wearcell" data-l="Wing damage"><span class="big num ${dc(Math.max(g.fl||0,g.fr||0))}">${Math.max(g.fl||0,g.fr||0)}<span style="font-size:14px">%</span></span>
+        <div class="wing3 num" title="Front wing left, right / rear wing"><span class="${dc(g.fl)}">${g.fl??0}</span><span class="${dc(g.fr)}">${g.fr??0}</span><span class="${dc(g.rw)}">rear ${g.rw??0}</span></div></div>
       <div data-l="Fuel mix"><span class="mix ${esc(d.mix)}">${esc(d.mix||'–')}</span><span class="sub num">${d.fuel_kg} kg · ${d.fuel_surplus>=0?'+':''}${d.fuel_surplus} laps</span></div>
       <div class="ers" data-l="ERS"><div class="ersline"><b class="num">${Math.round(d.ers_pct)}%</b><span class="deploy${d.deploying?' on':''}">${d.deploying?'Deploying':'Harvesting'}</span></div>
         <div class="battery" title="Energy store ${d.ers_pct}%"><i style="width:${Math.min(100,d.ers_pct)}%"></i></div>
@@ -702,13 +706,14 @@ function renderEngineer(){
   put('eSheet',`<div class="phead"><h3>Setup sheet</h3><span class="sub">Current → engineer's</span><span class="spacer"></span><button class="btn small" type="button" data-act="copySetup">Copy setup</button></div>
     <table class="sheet"><tbody>${SHEET.map(([g,rows])=>`<tr class="grp"><th colspan="3">${g}</th></tr>`+rows.map(([k,l,u])=>`<tr class="${cur[k]!==tgt[k]?'chg':''}"><td>${l}</td><td class="n muted">${fmtv(cur[k])}${u}</td><td class="n"><b>${fmtv(tgt[k])}${u}</b></td></tr>`).join('')).join('')}</tbody></table>`);
   const d=C.diagnostics,it=T.tyresInnerTemperature,fa=(it.fl+it.fr)/2,ra=(it.rl+it.rr)/2;
-  const lapRows=C.recentLaps.slice().reverse().map(l=>`<tr><td class="n">${l.lapNumber}</td><td class="n ${l.isValid?'':'inv'}">${ft(l.lapTime)}</td><td class="n">${l.oversteerEvents}</td><td class="n">${l.understeerEvents}</td><td class="n">${Math.max(...Object.values(l.tyreWearDelta)).toFixed(1)}</td></tr>`).join('');
-  put('eDiag',`<div class="phead"><h3>What the telemetry shows</h3></div>
+  const lapRows=C.recentLaps.slice().reverse().map(l=>`<tr><td class="n">${l.lapNumber}</td><td class="n ${l.isValid?'':'inv'}">${ft(l.lapTime)}</td><td class="n">${l.oversteerEvents}</td><td class="n">${l.understeerEvents}</td><td class="n">${l.kerbEvents??'–'}</td><td class="n">${Math.max(...Object.values(l.tyreWearDelta)).toFixed(1)}</td></tr>`).join('');
+  put('eDiag',`<div class="phead"><h3>What the telemetry shows</h3>${C.setupChangedLap!=null?`<span class="tag blue">New setup since lap ${C.setupChangedLap}</span>`:''}</div>
+    ${C.setupChangedLap!=null?'<div class="note">Setup changed, so the counts started again: the advice now comes only from laps on the new setup.</div>':''}
     <div class="sgroup"><dl class="kv"><dt>Oversteer samples, this lap</dt><dd class="num">${d.oversteerEvents}</dd><dt>Understeer samples, this lap</dt><dd class="num">${d.understeerEvents}</dd>
-      <dt>Front locking samples, session</dt><dd class="num">${d.frontLockingEvents.toLocaleString()}</dd><dt>Kerb / bottoming samples, session</dt><dd class="num">${d.kerbBottomingEvents.toLocaleString()}</dd>
+      <dt>Front locking samples, session</dt><dd class="num">${d.frontLockingEvents.toLocaleString()}</dd><dt>Kerb strikes, over a lap</dt><dd class="num">${d.kerbBottomingEvents}</dd>
       <dt>Core temperature front / rear</dt><dd class="num">${Math.round(fa)}° / ${Math.round(ra)}°</dd><dt>Laps logged</dt><dd class="num">${C.laps} (${C.validLaps} valid)</dd></dl></div>
-    ${lapRows?`<div class="scroll"><table><thead><tr><th class="n">Lap</th><th class="n">Time</th><th class="n">Oversteer</th><th class="n">Understeer</th><th class="n">Wear +%</th></tr></thead><tbody>${lapRows}</tbody></table></div>`:''}
-    <div class="legend">Samples are counted on every telemetry packet from your own game, as the original race engineer did. Balance uses this lap's oversteer and understeer; locking and kerb samples build up over the session.</div>`);
+    ${lapRows?`<div class="scroll"><table><thead><tr><th class="n">Lap</th><th class="n">Time</th><th class="n">Oversteer</th><th class="n">Understeer</th><th class="n">Kerb strikes</th><th class="n">Wear +%</th></tr></thead><tbody>${lapRows}</tbody></table></div>`:''}
+    <div class="legend">Samples are counted on every telemetry packet from your own game, as the original race engineer did. Balance uses this lap's oversteer and understeer. Kerb strikes are sharp suspension movements, counted over the current or last lap (whichever is higher); more than 3 means the car is too stiff or too low. Front locking builds up over the session.</div>`);
 }
 
 function setupText(E){

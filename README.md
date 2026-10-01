@@ -94,8 +94,8 @@ The Sessions page on the dashboard can do the same, and can delete a session's r
 
 The engineer comes from the F1 2020 AI Race Engineer app. `f1live/engineer.py` is a line-by-line port
 of its relay's detectors (`relay/f1_relay.py`) and its setup engine (`src/lib/engineer_engine.ts` and
-`strategy.ts`), with the same thresholds, rules and wording. `tests/test_engineer.py` checks the port
-against outputs of the original TypeScript.
+`strategy.ts`), with the same thresholds, rules and wording, except the kerb detector (below).
+`tests/test_engineer.py` checks the port against outputs of the original TypeScript.
 
 - It only works for drivers whose game sends telemetry to the recording computer: wheel slip,
   suspension and the car setup only go to a driver's own game. The page says so when that's missing,
@@ -103,14 +103,17 @@ against outputs of the original TypeScript.
 - The handling boxes a driver ticks stay in that browser, per driver and track, like in the original
   app. Two people can look at the same driver with different boxes ticked.
 - The counters are per telemetry packet, as in the original. Oversteer and understeer restart each lap;
-  front locking and kerb strikes add up over the session.
-- Differences from the original relay, all in what it read from the game: a lap's validity is the game's
-  flag for that lap (the relay's parser was laid out for F1 2021 and read the wrong byte), and the
+  kerb strikes count over the current or last lap (whichever is higher); front locking adds up over the
+  session.
+- Kerb strikes are sharp suspension movements, faster than 1000 mm/s. The original counted suspension
+  *position* above 0.08 over the whole session; F1 2020 reports position in millimetres, so every sample
+  counted and every car was diagnosed as bottoming on kerbs. Position can't tell kerbs apart anyway (aero
+  load at speed compresses the car more than kerbs do). On the Singapore race of 2026-09-30, more than 3
+  strikes in a lap flagged 7 of 13 laps on the stiffest setup (rear springs 11) and 1 of 13 on the softest.
+- Other differences from the original relay, both in what it read from the game: a lap's validity is the
+  game's flag for that lap (the relay's parser was laid out for F1 2021 and read the wrong byte), and the
   all-zero setup the game sends after a car retires or finishes is ignored.
-- The detector thresholds can be changed under `[engineer]` in the config. F1 2020 reports suspension
-  position in millimetres, so the original kerb threshold of 0.08 counts nearly every sample as a kerb
-  hit, and the engine always suggests softer front springs and more ride height (when not already at its
-  limits). The default keeps the original value.
+- The detector thresholds can be changed under `[engineer]` in the config.
 
 `GET /api/engineer?driver=<name>&fb=oversteer_exit,front_locking` returns one driver's analysis as JSON.
 

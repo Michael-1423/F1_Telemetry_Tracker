@@ -4,7 +4,8 @@ Ported from the F1 2020 AI Race Engineer app:
   - EngineerFeed      <- relay/f1_relay.py  TelemetryState (detectors, lap records, snapshot)
   - analyze()         <- src/lib/engineer_engine.ts  analyzeTelemetryAndGenerateSetup
   - session_briefing  <- src/lib/strategy.ts  buildSessionBriefing
-The logic, thresholds and wording are kept exactly as they were there. tests/test_engineer.py checks
+The logic, thresholds and wording are kept exactly as they were there, except the kerb detector (see
+below). tests/test_engineer.py checks
 analyze() against outputs of the original TypeScript. Snapshots and results use the original's
 camelCase field names so the two stay easy to compare.
 
@@ -18,7 +19,15 @@ Deliberate differences from the relay, all in what it read from the packets rath
   - All-zero setup packets are ignored. The game sends them once a car retires or finishes, and the
     relay then worked from a setup of zeros. The relay also started from a made-up setup before the
     game sent one; here there is no analysis until the real setup arrives.
-  - Detector thresholds can be changed under [engineer] in the config. The defaults are the relay's.
+  - Kerb strikes are sharp suspension movements (velocity above 1000 mm/s), counted per lap. The relay
+    counted suspension *position* above 0.08 over the whole session, but F1 2020 reports position in
+    millimetres, so every sample counted and the engine always diagnosed kerb bottoming. Position isn't
+    a usable signal (aero load at speed compresses the car more than kerbs do), and any whole-session
+    count eventually passes the engine's "more than 3". The engine rule itself is unchanged.
+  - When the driver changes the setup, the detector counts start again. The relay kept counting, so after
+    a change the engine went on diagnosing from laps on the old setup and repeated its advice on top of
+    the new values (e.g. +1 ride height, then +1 again straight away).
+  - Detector thresholds can be changed under [engineer] in the config. The others are the relay's.
 """
 
 from __future__ import annotations
@@ -30,14 +39,15 @@ from typing import Any
 from . import lookups as L
 from . import packets as P
 
-# Detector thresholds, as hard-coded in relay/f1_relay.py. Note F1 2020 reports suspension position
-# in millimetres, so kerb_suspension = 0.08 is exceeded on nearly every motion packet.
+# Detector thresholds. All but kerb_suspension_velocity are as hard-coded in relay/f1_relay.py.
 DEFAULTS: dict[str, float] = {
     "oversteer_slip": 0.22,        # rear wheel slip above this and slip_ratio x the front -> oversteer sample
     "understeer_slip": 0.22,       # front wheel slip above this and slip_ratio x the rear...
     "understeer_lat_g": 1.8,       # ...with lateral g above this -> understeer sample
     "slip_ratio": 1.5,
-    "kerb_suspension": 0.08,       # any |suspension position| above this -> kerb / bottoming sample
+    # any |suspension velocity| above this (mm/s) -> kerb strike sample. Singapore 2026-09-30, >3 per lap:
+    # 7/13 laps on the stiffest setup (rear springs 11), 1/13 on the softest (rear springs 1).
+    "kerb_suspension_velocity": 1000.0,
     "lock_brake": 0.7,             # brake pedal above this...
     "lock_brake_temp_gap": 120.0,  # ...with front brakes this much hotter than the rears -> front locking sample
 }
@@ -83,6 +93,11 @@ HANDLING_FEEDBACK_OPTIONS: list[dict[str, str]] = [
      "symptom": "Wings set too high inducing unnecessary aerodynamic drag"},
 ]
 FEEDBACK_IDS = {o["id"] for o in HANDLING_FEEDBACK_OPTIONS}
+
+
+def _handling(setup: dict) -> dict:
+    """The setup without fuel load, which isn't a handling change."""
+    return {k: v for k, v in setup.items() if k != "fuelLoad"}
 
 
 def _quad(v: list, nd: int | None = None) -> dict:
@@ -135,7 +150,9 @@ class EngineerFeed:
         self.understeer_events = 0
         self.front_locking_events = 0
         self.rear_locking_events = 0
-        self.kerb_bottoming_events = 0
+        self.kerb_bottoming_events = 0   # this lap
+        self.kerb_last_lap = 0           # the last completed lap
+        self.setup_changed_lap: int | None = None   # lap of the last setup change (counters restart there)
 
     def feed(self, pkt: dict, idx: int) -> None:
         """One decoded packet from this driver's own game; idx is their car (the header's playerCarIndex)."""
@@ -155,7 +172,8 @@ class EngineerFeed:
     def on_motion(self, cm: dict, extra: dict) -> None:
         m = {"gForceLateral": round(cm["gForceLateral"], 2), "gForceLongitudinal": round(cm["gForceLongitudinal"], 2),
              "wheelSlip": [round(x, 4) for x in extra["wheelSlip"]],                 # [RL, RR, FL, FR]
-             "suspensionPosition": [round(x, 4) for x in extra["suspensionPosition"]]}
+             "suspensionPosition": [round(x, 4) for x in extra["suspensionPosition"]],
+             "suspensionVelocity": [round(x, 4) for x in extra["suspensionVelocity"]]}
         self.motion.update(m)
         th = self.th
         # Oversteer: significant rear wheel slip; understeer: front slip with high lateral g
@@ -168,8 +186,8 @@ class EngineerFeed:
                 self.oversteer_events += 1
             elif front_slip > th["understeer_slip"] and front_slip > rear_slip * th["slip_ratio"] and lat_g > th["understeer_lat_g"]:
                 self.understeer_events += 1
-        # Kerb bottoming
-        if any(abs(s) > th["kerb_suspension"] for s in m["suspensionPosition"]):
+        # Kerb strikes: a wheel punched up or dropped sharply
+        if any(abs(v) > th["kerb_suspension_velocity"] for v in m["suspensionVelocity"]):
             self.kerb_bottoming_events += 1
 
     def on_telemetry(self, td: dict) -> None:
@@ -219,6 +237,7 @@ class EngineerFeed:
     def on_setup(self, su: dict) -> None:
         if not any(su.values()):   # other cars' setups arrive as zeros
             return
+        old = self.setup
         self.setup = {
             "frontWing": su["frontWing"], "rearWing": su["rearWing"],
             "onThrottleDiff": su["onThrottle"], "offThrottleDiff": su["offThrottle"],
@@ -234,6 +253,17 @@ class EngineerFeed:
             "frontRightTyrePressure": round(su["frontRightTyrePressure"], 1),
             "ballast": su["ballast"], "fuelLoad": round(su["fuelLoad"], 1),
         }
+        if old and _handling(old) != _handling(self.setup):
+            self._restart_evidence()
+
+    def _restart_evidence(self) -> None:
+        """The driver changed the setup: what the detectors counted belongs to the old one. Without this the
+        engine keeps diagnosing (say) kerb bottoming from laps on the old setup and asks for the same change
+        again on top of the new values."""
+        self.oversteer_events = self.understeer_events = 0
+        self.front_locking_events = self.rear_locking_events = 0
+        self.kerb_bottoming_events = self.kerb_last_lap = 0
+        self.setup_changed_lap = self.lap_data.get("currentLapNum")
 
     def _record_completed_lap(self, lap_num: int, lap_time: float, current_lap_packet: dict) -> None:
         # Fuel used
@@ -265,10 +295,12 @@ class EngineerFeed:
             "tyreCompound": self.status.get("tyreCompound", "Soft"),
             "isValid": not self.lap_data.get("isCurrentLapInvalid", False),   # the lap just completed
             "oversteerEvents": self.oversteer_events, "understeerEvents": self.understeer_events,
+            "kerbEvents": self.kerb_bottoming_events,
         })
         self.current_lap_max_speed = 0
         self.oversteer_events = 0
         self.understeer_events = 0
+        self.kerb_last_lap, self.kerb_bottoming_events = self.kerb_bottoming_events, 0
 
     def snapshot(self, driver_name: str, session: dict) -> dict:
         """The relay's TelemetrySnapshot for this driver (the engine's input)."""
@@ -276,11 +308,12 @@ class EngineerFeed:
             "driverName": driver_name, "session": dict(session), "telemetry": dict(self.telemetry),
             "motion": dict(self.motion), "lapData": dict(self.lap_data), "status": dict(self.status),
             "setup": dict(self.setup) if self.setup else None, "damage": dict(self.damage),
-            "completedLaps": list(self.completed_laps), "participants": [],
+            "completedLaps": list(self.completed_laps), "participants": [], "setupChangedLap": self.setup_changed_lap,
             "diagnostics": {
                 "oversteerEvents": self.oversteer_events, "understeerEvents": self.understeer_events,
                 "frontLockingEvents": self.front_locking_events, "rearLockingEvents": self.rear_locking_events,
-                "kerbBottomingEvents": self.kerb_bottoming_events,
+                # a whole lap's worth: the last completed lap, or this one once it has more
+                "kerbBottomingEvents": max(self.kerb_bottoming_events, self.kerb_last_lap),
             },
             "timestamp": self.last_st,
         }
@@ -685,6 +718,7 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
         "session": snap["session"], "telemetry": snap["telemetry"], "status": snap["status"], "damage": snap["damage"],
         "lapData": snap["lapData"], "diagnostics": snap["diagnostics"], "setup": snap["setup"],
         "laps": len(laps), "validLaps": sum(1 for l in laps if l["isValid"]), "recentLaps": laps[-5:],
+        "setupChangedLap": snap.get("setupChangedLap"),
     }
     if snap["setup"]:
         try:

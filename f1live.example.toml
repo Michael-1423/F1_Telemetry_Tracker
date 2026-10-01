@@ -33,14 +33,14 @@ include_ai_only = false   # also save incidents that involve no human driver
 sessions = ["race"]       # session kinds that save incident packages (practice & qualifying: summaries only)
 
 [engineer]
-# Race engineer detectors, counted on every packet from each driver's own game. These are the
-# original race engineer's values. F1 2020 sends suspension position in millimetres, so with
-# kerb_suspension = 0.08 nearly every sample counts as a kerb hit.
+# Race engineer detectors, counted on every packet from each driver's own game. All but the kerb
+# threshold are the original race engineer's values.
 # oversteer_slip = 0.22        # rear wheel slip above this, and slip_ratio x the front
 # understeer_slip = 0.22       # front wheel slip above this, and slip_ratio x the rear...
 # understeer_lat_g = 1.8       # ...with lateral g above this
 # slip_ratio = 1.5
-# kerb_suspension = 0.08       # any |suspension position| above this
+# kerb_suspension_velocity = 1000   # any |suspension velocity| above this (mm/s) is a kerb strike;
+                                   # more than 3 in a lap flags the car as too stiff / too low
 # lock_brake = 0.7             # brake pedal above this, with the front brakes...
 # lock_brake_temp_gap = 120    # ...this many °C hotter than the rears
 
