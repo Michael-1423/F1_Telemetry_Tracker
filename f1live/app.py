@@ -10,6 +10,7 @@ import threading
 import time
 from typing import Iterable
 
+from . import engineer as ENG
 from . import packets as P
 from .incidents import IncidentRecorder
 from .model import Session
@@ -40,7 +41,8 @@ class Pipeline:
         st = cfg.get("storage", {})
         self.store = SessionStore(st.get("dir", "data/races"))
         self.retention = Retention(self.store, st.get("raw_retention", "delete_on_next_race"),
-                                   float(st.get("delete_grace_seconds", 120)), st.get("delete_trigger", "race"))
+                                   float(st.get("delete_grace_seconds", 120)), st.get("delete_trigger", "race"),
+                                   bool(st.get("delete_incidents", True)))
         self.record_raw = bool(st.get("record_raw", True))
         # which session kinds keep raw packets / incident packages (practice & quali: summaries only)
         self.raw_kinds = set(st.get("record_raw_for", ["race"]))
@@ -55,6 +57,7 @@ class Pipeline:
         self.detail_version = 0
         self._detail_sig = None
         self.snapshot_version = 0
+        self.engineer_inputs: dict[str, dict] = {}   # lower-case driver name -> race engineer input
         self.cond = threading.Condition()
         self.stats = {"packets": 0, "bad": 0, "other_format": 0, "started": time.time()}
         self.last_packet_wall = 0.0
@@ -244,10 +247,13 @@ class Pipeline:
                 self.detail_bytes = json.dumps(driver_detail(s), default=_default, separators=(",", ":")).encode()
                 self.detail_version += 1
         extra["app"]["detail_version"] = self.detail_version
+        roster, engineer_inputs = ENG.inputs(s) if s is not None else ([], {})
+        extra["roster"] = roster
         snap = snapshot(s, ctx.recorder.done if ctx else [], extra)
         data = json.dumps(snap, default=_default, separators=(",", ":")).encode()
         with self.cond:
             self.snapshot_bytes = data
+            self.engineer_inputs = engineer_inputs
             self.snapshot_version += 1
             self.cond.notify_all()
 

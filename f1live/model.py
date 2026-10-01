@@ -14,6 +14,7 @@ import time
 from collections import Counter, deque
 from typing import Any, Callable
 
+from . import engineer as ENG
 from . import laps as LP
 from . import lookups as L
 from . import packets as P
@@ -261,6 +262,8 @@ class Session:
         self.chequered = False
         self.path: str | None = None
         self._pair_events: dict[tuple, float] = {}
+        self.engineers: dict[int, ENG.EngineerFeed] = {}   # car index -> race engineer, fed by that driver's own game
+        self.engineer_th = cfg.get("engineer", {})
 
     # ------------------------------------------------------------------ helpers
     @property
@@ -385,6 +388,12 @@ class Session:
         is_primary = key == self.primary
         if is_primary or self.primary is None:
             self.st = h["sessionTime"]
+        pc = h["playerCarIndex"]
+        if pc < 22 and pid in ENG.FEED_PACKETS:
+            eng = self.engineers.get(pc)
+            if eng is None:
+                eng = self.engineers[pc] = ENG.EngineerFeed(self.engineer_th)
+            eng.feed(pkt, pc)
 
         if pid == P.LAP:
             for i, ld in enumerate(pkt["lapData"]):

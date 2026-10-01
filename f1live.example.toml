@@ -19,6 +19,7 @@ record_raw_for = ["race"]  # session kinds that keep raw packets: "race", "quali
 raw_retention = "delete_on_next_race"
 delete_grace_seconds = 120
 delete_trigger = "race"   # "race": only a new race triggers deletion; "session": any new session
+delete_incidents = true   # also delete earlier sessions' incident packages (kept sessions keep theirs)
 
 [session]
 end_timeout_seconds = 90  # a session is finalised after this long without packets
@@ -30,6 +31,18 @@ max_seconds = 90          # cap when several triggers merge into one incident
 capture = ["collision", "spin", "damage", "penalty", "retirement", "manual"]
 include_ai_only = false   # also save incidents that involve no human driver
 sessions = ["race"]       # session kinds that save incident packages (practice & qualifying: summaries only)
+
+[engineer]
+# Race engineer detectors, counted on every packet from each driver's own game. All but the kerb
+# threshold are the original race engineer's values.
+# oversteer_slip = 0.22        # rear wheel slip above this, and slip_ratio x the front
+# understeer_slip = 0.22       # front wheel slip above this, and slip_ratio x the rear...
+# understeer_lat_g = 1.8       # ...with lateral g above this
+# slip_ratio = 1.5
+# kerb_suspension_velocity = 1000   # any |suspension velocity| above this (mm/s) is a kerb strike;
+                                   # more than 3 in a lap flags the car as too stiff / too low
+# lock_brake = 0.7             # brake pedal above this, with the front brakes...
+# lock_brake_temp_gap = 120    # ...this many °C hotter than the rears
 
 [drivers.aliases]
 # "Online name" = "Name to show"

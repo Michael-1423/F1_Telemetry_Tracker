@@ -9,8 +9,9 @@ import os
 import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
+from . import engineer as ENG
 from .app import Pipeline
 
 WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
@@ -58,8 +59,10 @@ def make_handler(pipe: Pipeline, cfg: dict):
 
         # --------------------------------------------------------------- GET
         def do_GET(self) -> None:
-            path = unquote(urlparse(self.path).path)
+            url = urlparse(self.path)
+            path = unquote(url.path)
             parts = [p for p in path.split("/") if p]
+            query = parse_qs(url.query)
             if path in ("/", "/index.html"):
                 return self._file(os.path.join(WEB_DIR, "index.html"), "text/html; charset=utf-8")
             if path == "/api/state":
@@ -67,7 +70,12 @@ def make_handler(pipe: Pipeline, cfg: dict):
             if path == "/api/detail":
                 return self._send(200, pipe.detail_bytes)
             if path == "/api/stream":
-                return self._stream()
+                return self._stream(_engineer_args(query))
+            if path == "/api/engineer":
+                args = _engineer_args(query)
+                if not args:
+                    return self._json({"error": "driver required"}, 400)
+                return self._send(200, _engineer_json(pipe.engineer_inputs, *args))
             if path == "/api/sessions":
                 return self._json({"sessions": pipe.store.list(), "can_control": self._can_control()})
             if len(parts) >= 3 and parts[:2] == ["api", "sessions"]:
@@ -95,7 +103,9 @@ def make_handler(pipe: Pipeline, cfg: dict):
         def _can_control(self) -> bool:
             return allow_remote_control or self._is_local()
 
-        def _stream(self) -> None:
+        def _stream(self, engineer: tuple[str, list[str]] | None = None) -> None:
+            """Live snapshots. With a driver (the engineer page), each one also carries that driver's
+            race engineer analysis, with the viewer's handling feedback applied."""
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-store")
@@ -106,11 +116,13 @@ def make_handler(pipe: Pipeline, cfg: dict):
                 while True:
                     with pipe.cond:
                         pipe.cond.wait_for(lambda: pipe.snapshot_version != seen, timeout=15)
-                        version, data = pipe.snapshot_version, pipe.snapshot_bytes
+                        version, data, inputs = pipe.snapshot_version, pipe.snapshot_bytes, pipe.engineer_inputs
                     if version == seen:
                         self.wfile.write(b": keepalive\n\n")
                     else:
                         seen = version
+                        if engineer:   # splice it into the snapshot object
+                            data = data[:-1] + b',"engineer":' + _engineer_json(inputs, *engineer) + b"}"
                         self.wfile.write(b"data: " + data + b"\n\n")
                     self.wfile.flush()
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
@@ -151,6 +163,19 @@ def make_handler(pipe: Pipeline, cfg: dict):
             return self._json({"error": "not found"}, 404)
 
     return Handler
+
+
+def _engineer_args(query: dict) -> tuple[str, list[str]] | None:
+    """?engineer=<driver name>&fb=<feedback id>,<feedback id>  (driver= also accepted)"""
+    name = (query.get("engineer") or query.get("driver") or [""])[0].strip()[:64]
+    if not name:
+        return None
+    fb = [f for f in ",".join(query.get("fb", [])).split(",") if f]
+    return name, fb
+
+
+def _engineer_json(inputs: dict, name: str, feedback: list[str]) -> bytes:
+    return json.dumps(ENG.payload(inputs.get(name.lower()), name, feedback), separators=(",", ":")).encode()
 
 
 def list_incidents(session_path: str) -> list[dict]:
