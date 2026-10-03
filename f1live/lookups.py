@@ -64,6 +64,8 @@ PENALTY_TYPES = {
     14: "This and previous lap invalidated", 15: "This and previous lap invalidated without reason",
     16: "Retired", 17: "Black flag timer",
 }
+# F1 2020 sends its "5 second penalty" as type 1 (Stop Go) with time=5: it is served stationary at the next
+# pit stop, and if the driver never pits it comes back as type 4 (+5s) with infringement 44.
 # Penalty types that actually cost the driver something (vs. warnings / lap invalidations).
 SERIOUS_PENALTIES = {0, 1, 2, 4, 6, 17}
 
@@ -87,7 +89,7 @@ INFRINGEMENTS = {
     36: "Safety car illegal overtake", 37: "Safety car exceeding allowed pace",
     38: "Virtual safety car exceeding allowed pace", 39: "Formation lap below allowed speed",
     40: "Retired: mechanical failure", 41: "Retired: terminally damaged",
-    42: "Safety car falling too far back", 43: "Black flag timer", 44: "Unserved stop go penalty",
+    42: "Safety car falling too far back", 43: "Black flag timer", 44: "Unserved pit-stop penalty",
     45: "Unserved drive through penalty", 46: "Engine component change", 47: "Gearbox change",
     48: "League grid penalty", 49: "Retry penalty", 50: "Illegal time gain", 51: "Mandatory pitstop",
 }

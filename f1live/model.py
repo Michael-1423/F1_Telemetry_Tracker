@@ -587,6 +587,9 @@ class Session:
             return
         pt, it = d.get("penaltyType"), d.get("infringementType")
         pname = L.PENALTY_TYPES.get(pt, f"penalty #{pt}")
+        if pt == 1 and d.get("time") not in (None, 255):
+            # the game's "5 second penalty" arrives as a stop-go with time=5, served at the next pit stop
+            pname = f"{d['time']}s penalty (served at next pit stop)"
         iname = L.INFRINGEMENTS.get(it, f"infringement #{it}")
         cars = [v] + ([o] if o is not None and o < 22 and o != v else [])
         c = self.cars[v]
