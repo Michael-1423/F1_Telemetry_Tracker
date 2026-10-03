@@ -77,6 +77,7 @@ kbd{font:600 11px var(--font);border:1px solid rgba(255,255,255,.5);border-radiu
 .src::before{content:"";width:4px;height:14px;border-radius:2px;background:var(--c,#999)}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:none}
 .dot.warn{background:var(--amber)}.dot.bad{background:var(--red)}
+.dot.own{display:inline-block;width:8px;height:8px;margin-left:8px;vertical-align:middle;position:relative;top:-1px}
 
 /* banners */
 .banner{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 16px;background:#fff5e8;border-radius:var(--r);color:var(--ink)}
@@ -418,6 +419,7 @@ function render(){
   $('log').innerHTML=(a.log||[]).map(esc).join('<br>');
 }
 
+const OWN_DOT='<span class="dot own" title="Receiving telemetry from this driver’s own game" aria-label="Receiving telemetry from this driver’s own game"></span>';
 function renderLive(){
   const rows=S.live||[];
   $('live').innerHTML=rows.map(d=>{
@@ -432,7 +434,7 @@ function renderLive(){
     const w=d.wear||[];const wc=v=>v>=60?'t-red':v>=40?'t-yellow':'';const g=d.dmg||{};const dc=v=>v>=50?'t-red':v>=20?'t-yellow':'';
     return `<div class="lrow${out?' out':''}">
       <div class="pos num">${d.pos||'–'}</div>
-      <div class="drv" style="--tc:${d.color}"><span class="n">${esc(d.name)}</span><span class="t">${esc(d.team)}${gap?' · '+gap:''}${d.own?'':' · via other game'}</span>${tags.length?`<span class="tags">${tags.join('')}</span>`:''}</div>
+      <div class="drv" style="--tc:${d.color}"><span class="n">${esc(d.name)}${d.own?OWN_DOT:''}</span><span class="t">${esc(d.team)}${gap?' · '+gap:''}${d.own?'':' · via other game'}</span>${tags.length?`<span class="tags">${tags.join('')}</span>`:''}</div>
       <div class="tyrecell" data-l="Tyre">${tyre(d.tyre)}<div><div style="font-weight:700">${esc(String(d.tyre).split(' (')[0])}</div><div class="sub">${d.tyre_age==null?'–':d.tyre_age===1?'1 lap old':d.tyre_age+' laps old'}</div></div></div>
       <div class="wearcell" data-l="Avg wear"><span class="big num ${wc(d.wear_avg)}">${d.wear_avg??'–'}<span style="font-size:14px">%</span></span>
         ${w.length?`<div class="wear4 num" title="Front-left, front-right / rear-left, rear-right"><span class="${wc(w[0])}">${w[0]}</span><span class="${wc(w[1])}">${w[1]}</span><span class="${wc(w[2])}">${w[2]}</span><span class="${wc(w[3])}">${w[3]}</span></div>`:''}</div>
@@ -464,7 +466,7 @@ function renderTimesheet(){
   $('timesheet').innerHTML=`<table class="ts"><thead><tr><th class="n">Pos</th><th>Driver</th><th class="n">Fastest lap</th><th class="n">Gap</th><th class="n">S1</th><th class="n">S2</th><th class="n">S3</th>
     <th>Tyre</th><th class="n">ERS used</th><th>Mix</th><th class="n">Fuel</th><th class="n">Traffic</th><th class="n">Cuts</th><th class="n">4 wheels off</th><th class="n">Laps <small class="muted">valid / timed</small></th><th class="n">Top km/h</th><th>Now</th></tr></thead><tbody>
     ${rows.map(r=>`<tr><td class="n" style="font-weight:700;font-size:16px">${r.pos??'–'}</td>
-      <td class="tsdrv" style="--tc:${r.color}"><b>${esc(r.name)}</b><div class="sub">${esc(r.team)}${r.own?'':' · via other game'}</div></td>
+      <td class="tsdrv" style="--tc:${r.color}"><b>${esc(r.name)}</b>${r.own?OWN_DOT:''}<div class="sub">${esc(r.team)}${r.own?'':' · via other game'}</div></td>
       <td class="n"><span class="besttime num ${r.pos===1?'t-purple':''}">${ft(r.best)}</span><div class="sub">${r.best_lap?'lap '+r.best_lap:'no valid lap'}</div></td>
       <td class="n">${r.pos===1?'':r.gap!=null?'+'+r.gap.toFixed(3):'–'}</td>${sec(r,'s1')}${sec(r,'s2')}${sec(r,'s3')}
       <td>${tyre(r.tyre,true)} ${esc(String(r.tyre||'').split(' (')[0])} <span class="muted num">${r.tyre_age??''}</span></td>
