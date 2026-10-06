@@ -588,6 +588,13 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     understeer_count = diag.get("understeerEvents") or 0
     front_lock_count = diag.get("frontLockingEvents") or 0
     kerb_hits = diag.get("kerbBottomingEvents") or 0
+    # Behavioural evidence is useful even when the lap was invalid.
+    # Invalid laps must not affect lap-time/pace analysis, but events such
+    # as oversteer, understeer still describe the car's
+    # behaviour and should influence setup recommendations.
+    for lap in snapshot.get("completedLaps", [])[-3:]:
+        oversteer_count += lap.get("oversteerEvents", 0) or 0
+        understeer_count += lap.get("understeerEvents", 0) or 0
 
     balance = 0  # negative = oversteer, positive = understeer
 
