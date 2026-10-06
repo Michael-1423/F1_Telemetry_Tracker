@@ -387,6 +387,69 @@ def test_high_tyre_wear_feedback_recommends_front_setup_changes():
     assert "frontCamber" in parameters
 
 
+def test_invalid_lap_preserves_behaviour_events():
+    f = E.EngineerFeed()
+    lap = blank(P.LAP)
+    ld = lap["lapData"][0]
+
+    # Lap 1 is invalid
+    ld.update(currentLapNum=1, currentLapInvalid=1)
+    f.feed(lap, 0)
+
+    # Generate behavioural evidence during the invalid lap
+    f.feed(
+        motion(
+            (0.30, 0.05, 0.05, 0.05),
+            susp_v=(0, 0, 1500.0, 0),
+        ),
+        0,
+    )
+
+    # Cross the finish line
+    ld.update(currentLapNum=2, currentLapInvalid=0, lastLapTime=90.0)
+    f.feed(lap, 0)
+
+    assert len(f.completed_laps) == 1
+
+    completed = f.completed_laps[0]
+
+    assert completed["isValid"] is False
+    assert completed["oversteerEvents"] == 1
+    assert completed["kerbEvents"] == 1
+
+
+def test_invalid_lap_behaviour_influences_setup_recommendation():
+    with open(GOLDEN, encoding="utf-8") as f:
+        snapshot = json.load(f)["cases"][0]["snapshot"]
+
+    snapshot["telemetry"]["tyresInnerTemperature"] = {
+        "fl": 100,
+        "fr": 100,
+        "rl": 100,
+        "rr": 100,
+    }
+
+    snapshot["completedLaps"] = [
+        {
+            "lapNumber": 1,
+            "isValid": False,
+            "oversteerEvents": 10,
+            "understeerEvents": 0,
+            "kerbEvents": 0,
+        }
+    ]
+
+    snapshot["diagnostics"]["oversteerEvents"] = 0
+    snapshot["diagnostics"]["understeerEvents"] = 0
+    snapshot["diagnostics"]["kerbBottomingEvents"] = 0
+
+    result = E.analyze(snapshot)
+
+    assert any(
+        rec["parameter"] == "onThrottleDiff" for rec in result["recommendations"]
+    )
+
+
 def test_payload_filters_feedback_and_waits_for_setup():
     f = E.EngineerFeed()
     entry = {
