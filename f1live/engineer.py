@@ -247,6 +247,8 @@ class EngineerFeed:
         self.setup_changed_lap: int | None = (
             None  # lap of the last setup change (counters restart there)
         )
+        self._lap_seen = False  # had a lap packet from this game yet
+        self._partial_lap = False  # joined mid-lap: the lap in progress isn't logged
 
     def feed(self, pkt: dict, idx: int) -> None:
         """One decoded packet from this driver's own game; idx is their car (the header's playerCarIndex)."""
@@ -341,11 +343,34 @@ class EngineerFeed:
             "isCurrentLapInvalid": bool(ld["currentLapInvalid"]),
             "penalties": ld["penalties"],
         }
+        if not self._lap_seen:
+            # The first lap packet from this game. If the lap is already under way the tracker (or the game)
+            # joined mid-session: the relay logged a lap "1" here with the previous lap's time, then a first
+            # full lap with half a lap of evidence and the whole stint's tyre wear. Wait for the next line.
+            self._lap_seen = True
+            self._partial_lap = lap["currentLapTime"] > 1.0
+            self.lap_data.update(lap)
+            return
         prev_lap_num = self.lap_data.get("currentLapNum", 1)
         # Did we just cross the line into a new lap?
         if lap["currentLapNum"] > prev_lap_num and lap["lastLapTime"] > 0:
-            self._record_completed_lap(prev_lap_num, lap["lastLapTime"], lap)
+            if self._partial_lap:
+                self._start_first_full_lap()
+            else:
+                self._record_completed_lap(prev_lap_num, lap["lastLapTime"], lap)
         self.lap_data.update(lap)
+
+    def _start_first_full_lap(self) -> None:
+        """Crossing the line after joining mid-lap: drop what was counted on the partial lap and start the
+        per-lap measurements (fuel, wear, temperatures, detectors) from here."""
+        self._partial_lap = False
+        self.lap_start_fuel = self.status.get("fuelInTank", 0.0)
+        self.lap_start_wear = dict(self.damage.get("tyresWear", {"fl": 0, "fr": 0, "rl": 0, "rr": 0}))
+        self._temp_sum = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+        self._temp_n = 0
+        self.current_lap_max_speed = 0
+        self.oversteer_events = self.understeer_events = 0
+        self.kerb_last_lap = self.kerb_bottoming_events = 0
 
     def on_status(self, cs: dict) -> None:
         self.status.update(
@@ -357,6 +382,7 @@ class EngineerFeed:
                 "tyreCompound": TYRE_COMPOUNDS.get(cs["visualTyreCompound"], "Dry"),
                 "tyresAgeLaps": cs["tyresAgeLaps"],
                 "ersStoreEnergy": round(cs["ersStoreEnergy"], 0),
+                "ersDeployMode": cs["ersDeployMode"],
             }
         )
         self.damage.update(
@@ -592,7 +618,15 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     # Invalid laps must not affect lap-time/pace analysis, but events such
     # as oversteer, understeer still describe the car's
     # behaviour and should influence setup recommendations.
-    for lap in snapshot.get("completedLaps", [])[-3:]:
+    # Only laps on the current setup count: after a change, laps on the old one would
+    # keep asking for the change that was just made.
+    changed = snapshot.get("setupChangedLap")
+    laps = [
+        lap
+        for lap in snapshot.get("completedLaps", [])
+        if changed is None or lap.get("lapNumber", 0) >= changed
+    ]
+    for lap in laps[-3:]:
         oversteer_count += lap.get("oversteerEvents", 0) or 0
         understeer_count += lap.get("understeerEvents", 0) or 0
 
@@ -1442,6 +1476,7 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
     out["car"] = {
         "session": snap["session"],
         "telemetry": snap["telemetry"],
+        "motion": {"gForceLateral": snap["motion"]["gForceLateral"]},
         "status": snap["status"],
         "damage": snap["damage"],
         "lapData": snap["lapData"],
@@ -1449,6 +1484,9 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
         "setup": snap["setup"],
         "laps": len(laps),
         "validLaps": sum(1 for l in laps if l["isValid"]),
+        "bestValidLap": min(
+            (l["lapTime"] for l in laps if l["isValid"] and l["lapTime"] > 0), default=0
+        ),
         "recentLaps": laps[-5:],
         "setupChangedLap": snap.get("setupChangedLap"),
     }

@@ -4,15 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pit Wall</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%2315151e'/><polygon points='9,46 25,18 55,18 39,46' fill='%23e10600'/></svg>">
-<meta name="theme-color" content="#15151e">
-<script>try{document.documentElement.dataset.theme=localStorage.getItem('pw.theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}catch(e){document.documentElement.dataset.theme='light';}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap">
 <style>
-/* Modelled on formula1.com: white page, navy top bar, quiet grey cards, upright bold type, red used sparingly.
-   Dark mode swaps the tokens; the race engineer keeps the original app's dark look in both. */
+/* Modelled on formula1.com: white page, navy top bar, quiet grey cards, upright bold type, red used sparingly. */
 :root{
   color-scheme:light;
   --page:#ffffff; --card:#f4f4f6; --card-2:#eaeaee; --line:#e0e0e6; --line-2:#d2d2da;
@@ -21,24 +17,8 @@
   --red:#e10600;
   --purple:#8b2fd6; --green:#008c4a; --yellow:#b07c00; --amber:#c25e00; --blue:#1f5fd1; --ers:#00a887;
   --soft:#e8002d; --medium:#f2c200; --hard:#b7b7bf; --inter:#39b54a; --wet:#0067ad;
-  --chip:#ffffff; --banner:#fff5e8; --seg-on:#ffffff; --shadow:rgba(21,21,30,.12);
-  --tag-red-bg:#fde3e1; --tag-red:#b10400; --tag-amber-bg:#fff0d6; --tag-amber:#8a4a00; --tag-blue-bg:#e2ebfc; --tag-blue:#16459c;
-  --pit-row:#dde8fd; --fun-bg:#efe6fb; --fun:#5b1a9a;
   --r:12px; --r-sm:8px;
   --font:"Titillium Web","Segoe UI",system-ui,-apple-system,sans-serif;
-  --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
-}
-:root[data-theme="dark"]{
-  color-scheme:dark;
-  --page:#101016; --card:#1a1a22; --card-2:#24242e; --line:#2b2b36; --line-2:#3b3b48;
-  --ink:#ececf1; --ink-2:#babac6; --muted:#8f8f9c; --dim:#676775;
-  --nav:#08080c; --nav-2:#20202a; --nav-ink:#ffffff; --nav-muted:#a9a9b6;
-  --red:#ff453a;
-  --purple:#bd85ff; --green:#36c97d; --yellow:#e6b800; --amber:#ffa24a; --blue:#6f9dff; --ers:#25cba7;
-  --hard:#d8d8de;
-  --chip:#101016; --banner:#2b2317; --seg-on:#2e2e3a; --shadow:rgba(0,0,0,.4);
-  --tag-red-bg:#3c1714; --tag-red:#ff8f85; --tag-amber-bg:#35260f; --tag-amber:#ffc27d; --tag-blue-bg:#18233f; --tag-blue:#a3c0ff;
-  --pit-row:#1f2f57; --fun-bg:#2a1d3d; --fun:#d6b3ff;
 }
 *{box-sizing:border-box}
 html,body{margin:0}
@@ -50,7 +30,6 @@ button{font:inherit;color:inherit}
 .muted{color:var(--muted)}
 h1,h2,h3{margin:0;font-weight:700;line-height:1.15;letter-spacing:-.005em;text-wrap:balance}
 :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
 /* ---------------- top bar (full-bleed navy, like the F1 site header) ---------------- */
 header.bar{position:sticky;top:0;z-index:20;margin-inline:-24px;padding:10px 24px;background:var(--nav);color:var(--nav-ink);
@@ -71,7 +50,7 @@ header.bar{position:sticky;top:0;z-index:20;margin-inline:-24px;padding:10px 24p
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--nav-muted);white-space:nowrap}
 .spacer{flex:1}
 .actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}
-@media (max-width:1100px){header.bar{grid-template-columns:1fr}.actions{justify-content:flex-start}}
+@media (max-width:900px){header.bar{grid-template-columns:1fr}.actions{justify-content:flex-start}}
 .rec{display:inline-flex;align-items:center;gap:7px;font-weight:600;font-size:13px;color:var(--nav-muted)}
 .rec::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--dim)}
 .rec.on{color:var(--nav-ink)}
@@ -81,23 +60,14 @@ header.bar{position:sticky;top:0;z-index:20;margin-inline:-24px;padding:10px 24p
 header .btn{background:transparent;color:var(--nav-ink);border-color:#4a4a58}
 header .btn:hover{border-color:var(--nav-ink)}
 .btn.red,header .btn.red{background:var(--red);border-color:var(--red);color:#fff}
-.btn.red:hover{filter:brightness(.92)}
+.btn.red:hover{background:#c40500;border-color:#c40500}
 .btn.small{font-size:13px;padding:3px 11px}
-.btn[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--page)}
+.btn[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
 kbd{font:600 11px var(--font);border:1px solid rgba(255,255,255,.5);border-radius:4px;padding:0 5px;margin-left:6px}
 .views{display:inline-flex;gap:2px;background:var(--nav-2);padding:3px;border-radius:var(--r-sm)}
 .views button{border:0;background:transparent;color:var(--nav-muted);padding:4px 12px;font-weight:600;font-size:14px;border-radius:6px;cursor:pointer;white-space:nowrap}
 .views button:hover{color:var(--nav-ink)}
-.views button[aria-pressed="true"]{background:#fff;color:#15151e}
-.iconbtn{display:inline-grid;place-items:center;width:34px;height:32px;border:1px solid #4a4a58;border-radius:var(--r-sm);background:transparent;color:var(--nav-ink);cursor:pointer}
-.iconbtn:hover{border-color:var(--nav-ink)}
-.iconbtn svg{width:17px;height:17px}
-/* Hammer Time: the serious switch */
-.hammer{display:inline-flex;align-items:center;gap:7px;border:1px solid #4a4a58;border-radius:var(--r-sm);background:transparent;color:var(--nav-muted);
-  padding:5px 12px;font-weight:700;font-size:13px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;white-space:nowrap}
-.hammer:hover{color:var(--nav-ink);border-color:var(--nav-ink)}
-.hammer svg{width:15px;height:15px}
-.hammer[aria-pressed="true"]{background:#00d2be;border-color:#00d2be;color:#08080c}
+.views button[aria-pressed="true"]{background:var(--page);color:var(--ink)}
 
 /* connected games strip */
 .feeds{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding-block:10px;border-bottom:1px solid var(--line)}
@@ -110,99 +80,78 @@ kbd{font:600 11px var(--font);border:1px solid rgba(255,255,255,.5);border-radiu
 .dot.own{display:inline-block;width:8px;height:8px;margin-left:8px;vertical-align:middle;position:relative;top:-1px}
 
 /* banners */
-.banner{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 16px;background:var(--banner);border-radius:var(--r);color:var(--ink)}
+.banner{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 16px;background:#fff5e8;border-radius:var(--r);color:var(--ink)}
 .banner.fin{background:var(--card)}
 .banner b{font-weight:700}
 
 /* section headings */
 section.block{margin-top:36px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.detail>*,.two>*{min-width:0}
 .shead{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 16px}
 .shead h2{font-size:28px}
 .shead p{margin:0;color:var(--muted);font-size:14px;max-width:70ch}
-.mald{margin-left:auto;display:inline-flex;align-items:center;gap:10px;padding:6px 14px;background:var(--card);border-radius:var(--r-sm);font-size:13px;color:var(--ink-2)}
-.mald b{font-size:24px;line-height:1;color:var(--ink)}
-.mald:empty{display:none}
 
 /* ---------------- live driver rows ---------------- */
 .live{display:grid;gap:8px}
-.lrow,.lhead{display:grid;grid-template-columns:70px minmax(200px,1.5fr) 118px 128px 92px 124px 104px 150px 72px}
+.lrow,.lhead{display:grid;grid-template-columns:56px minmax(170px,1.3fr) 120px 150px 124px 110px 200px 110px 124px 100px}
 .lrow{align-items:stretch;background:var(--card);border-radius:var(--r);min-height:68px;overflow:hidden}
-.lrow.pitting{background:var(--pit-row)}
 .lhead{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .lhead div,.lrow>div{padding:10px 12px;display:flex;flex-direction:column;justify-content:center;gap:2px}
 .lrow>div+div{border-left:1px solid var(--line)}
-.pos{font-weight:700;font-size:24px;align-items:center;line-height:1.1}
-.pos .iv{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+.pos{font-weight:700;font-size:24px;align-items:center}
 .lrow.out{opacity:.55}
 .drv{position:relative;padding-left:22px!important}
 .drv::before{content:"";position:absolute;left:10px;top:14px;bottom:14px;width:4px;border-radius:2px;background:var(--tc)}
 .lrow .drv{border-left:0!important}
 .drv .n{font-size:18px;font-weight:700;line-height:1.15}
 .drv .t{font-size:13px;color:var(--muted)}
-.drv .t b{color:var(--ink);font-weight:700}
 .tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
 .tag{font-size:11.5px;font-weight:600;padding:0 8px;line-height:19px;border-radius:999px;background:var(--card-2);color:var(--ink-2);white-space:nowrap}
-.tag.red{background:var(--tag-red-bg);color:var(--tag-red)}.tag.amber{background:var(--tag-amber-bg);color:var(--tag-amber)}.tag.blue{background:var(--tag-blue-bg);color:var(--tag-blue)}.tag.white{background:var(--ink);color:var(--page)}
-.tag.box{background:var(--blue);color:#fff;letter-spacing:.02em}
-.ftag{font-size:11.5px;font-weight:700;padding:0 8px;line-height:19px;border-radius:999px;background:var(--fun-bg);color:var(--fun);white-space:nowrap;cursor:help}
+.tag.red{background:#fde3e1;color:#b10400}.tag.amber{background:#fff0d6;color:#8a4a00}.tag.blue{background:#e2ebfc;color:#16459c}.tag.white{background:var(--ink);color:#fff}
 .big{font-size:21px;font-weight:700;line-height:1.05}
-.big small{font-size:13px;font-weight:600}
 .sub{font-size:12.5px;color:var(--muted)}
-.tyre{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--chip);border:4px solid var(--hard);font-weight:700;font-size:12px;flex:none;color:var(--ink)}
+.tyre{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#fff;border:4px solid var(--hard);font-weight:700;font-size:12px;flex:none;color:var(--ink)}
 .tyre.S{border-color:var(--soft)}.tyre.M{border-color:var(--medium)}.tyre.H{border-color:var(--hard)}.tyre.I{border-color:var(--inter)}.tyre.W{border-color:var(--wet)}
 .tyre.sm{width:20px;height:20px;border-width:3px;font-size:10px;vertical-align:middle}
-.tyre.lg{width:38px;height:38px;border-width:5px;font-size:14px}
-.tyrecell{flex-direction:row!important;align-items:center;justify-content:space-between!important;gap:8px!important}
-.tyrecell.punct{justify-content:center!important;background:var(--red);color:#fff;font-weight:700;text-align:center;line-height:1.15;flex-direction:column!important;gap:0!important}
-.tyrecell.punct span{font-size:18px;letter-spacing:.04em}
+.tyrecell{flex-direction:row!important;align-items:center;justify-content:flex-start!important;gap:10px!important}
+.wear4{display:grid;grid-template-columns:1fr 1fr;gap:2px;font-size:11.5px;width:62px}
+.wear4 span{background:#fff;text-align:center;line-height:16px;border-radius:3px}
 .wearcell{flex-direction:row!important;align-items:center;justify-content:space-between!important;gap:8px!important}
 .wing3{display:grid;grid-template-columns:1fr 1fr;gap:2px;font-size:11.5px;width:62px}
-.wing3 span{background:var(--chip);text-align:center;line-height:16px;border-radius:3px}
+.wing3 span{background:#fff;text-align:center;line-height:16px;border-radius:3px}
 .wing3 span:last-child{grid-column:1/-1}
 .mix{font-size:17px;font-weight:700}
 .mix.Rich,.mix.Max{color:var(--amber)}.mix.Lean{color:var(--ers)}
-.ers{display:grid;gap:4px}
+.ers{display:grid;gap:5px}
 .battery{position:relative;height:6px;background:var(--card-2);border-radius:3px;overflow:hidden}
 .battery i{position:absolute;inset:0 auto 0 0;background:var(--ers);border-radius:3px}
-.ersline{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px;color:var(--ink-2)}
+.ersline{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink-2)}
 .ersline b{font-size:18px;color:var(--ink)}
-.deploy{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
-.deploy::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--line-2)}
+.deploy{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.deploy::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--line-2)}
 .deploy.on{color:var(--ink);font-weight:600}
-.deploy.on::before{background:var(--ers);box-shadow:0 0 0 3px color-mix(in srgb,var(--ers) 25%,transparent)}
+.deploy.on::before{background:var(--ers);box-shadow:0 0 0 3px rgba(0,168,135,.2)}
 .t-purple{color:var(--purple)!important}.t-green{color:var(--green)!important}.t-yellow{color:var(--yellow)!important}.t-red{color:var(--red)!important}
 .inv{text-decoration:line-through;color:var(--muted)!important}
-.checking{grid-column:3/-1;align-items:center!important;justify-content:center!important;flex-direction:row!important;gap:10px!important;font-size:22px;font-weight:700;color:#fff;background:#dc0000;letter-spacing:.01em}
-.checking .dots span{animation:blink 1.2s infinite both}
-.checking .dots span:nth-child(2){animation-delay:.2s}.checking .dots span:nth-child(3){animation-delay:.4s}.checking .dots span:nth-child(4){animation-delay:.6s}.checking .dots span:nth-child(5){animation-delay:.8s}
-@keyframes blink{0%,80%,100%{opacity:.15}40%{opacity:1}}
-@media (prefers-reduced-motion:reduce){.checking .dots span{animation:none}}
+.tl{flex-direction:row!important;align-items:center;justify-content:flex-start!important;gap:10px!important}
+.tl .big{font-size:24px}
 @media (max-width:1200px){
   .lhead{display:none}
-  .lrow{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"pos drv drv drv" "tyre lap top wing" "mix ers ers tl"}
+  .lrow{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"pos drv drv drv" "tyre wear wing mix" "ers last best tl"}
   .lrow>div{border-left:0!important;border-top:1px solid var(--line)}
   .lrow>div:nth-child(1){grid-area:pos;border-top:0}.lrow>div:nth-child(2){grid-area:drv;border-top:0}.lrow>div:nth-child(3){grid-area:tyre}
-  .lrow>div:nth-child(4){grid-area:lap}.lrow>div:nth-child(5){grid-area:top}.lrow>div:nth-child(6){grid-area:wing}.lrow>div:nth-child(7){grid-area:mix}
-  .lrow>div:nth-child(8){grid-area:ers}.lrow>div:nth-child(9){grid-area:tl}
-  .lrow>.checking{grid-area:auto!important;grid-column:1/-1}
+  .lrow>div:nth-child(4){grid-area:wear}.lrow>div:nth-child(5){grid-area:wing}.lrow>div:nth-child(6){grid-area:mix}.lrow>div:nth-child(7){grid-area:ers}
+  .lrow>div:nth-child(8){grid-area:last}.lrow>div:nth-child(9){grid-area:best}.lrow>div:nth-child(10){grid-area:tl}
   .lrow>div[data-l]::before{content:attr(data-l);font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
-  .lrow>.tyrecell[data-l]::before{width:100%}
-  .tyrecell,.wearcell{flex-wrap:wrap}
+  .tyrecell,.wearcell,.tl{flex-wrap:wrap}
 }
 @media (max-width:620px){
-  .lrow{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"pos drv" "tyre lap" "top wing" "mix tl" "ers ers"}
+  .lrow{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"pos drv" "tyre wear" "wing mix" "ers ers" "last best" "tl tl"}
 }
 
-/* "Simply lovely": a Red Bull pole or win takes over the timing */
-.lovely{display:grid;justify-items:start;gap:10px;padding:40px 36px;border-radius:var(--r);color:#fff;
-  background:linear-gradient(115deg,#121f45 0%,#1e2f6b 55%,#cc1e4a 140%)}
-.lovely .q{font-size:clamp(44px,7vw,92px);font-weight:700;line-height:.95;letter-spacing:-.02em}
-.lovely .q::after{content:"";display:inline-block;width:.18em;height:.18em;margin-left:.06em;background:#ffcc00;border-radius:50%}
-.lovely .who{font-size:18px;color:#d9def0}
-.lovely .who b{color:#fff}
-.lovely .btn{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
-
-/* ---------------- panels, feed ---------------- */
+/* ---------------- panels, feed & incidents ---------------- */
+section.block.two{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){section.block.two{grid-template-columns:minmax(0,1fr)}}
 .panel{background:var(--card);border-radius:var(--r);overflow:hidden}
 .phead{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 16px;border-bottom:1px solid var(--line)}
 .phead h3{font-size:18px}
@@ -216,20 +165,16 @@ section.block{margin-top:36px;display:grid;grid-template-columns:minmax(0,1fr);g
 .msg .w{font-weight:700;font-size:14px}
 .msg .x{font-size:14px;color:var(--ink-2)}
 .msg.race .x{color:var(--ink);font-weight:600}
-.incchip{display:inline-block;border-radius:999px;background:var(--tag-red-bg);color:var(--tag-red);font:600 12px var(--font);padding:0 9px;line-height:19px;margin-left:8px;white-space:nowrap}
+.incbtn{border:0;background:#fde3e1;color:#b10400;font:600 12px var(--font);padding:1px 9px;margin-left:8px;cursor:pointer;border-radius:999px}
+.inc{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)}
+.inc .id{font-size:18px;font-weight:700;color:var(--muted)}
+.inc .tt{font-weight:600}
+.saved{font-size:12.5px;font-weight:600;color:var(--green);display:inline-flex;align-items:center;gap:6px}
+.saved::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}
 
-/* ---------------- setups / tables ---------------- */
-.scroll{overflow-x:auto}
-table{border-collapse:collapse;width:100%;font-size:14px}
-th,td{padding:8px 12px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
-th{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--card)}
-td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
-tbody tr:last-child td{border-bottom:0}
-table.setups td,table.setups th{padding:6px 16px}
-table.setups thead th{text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink);font-weight:700}
-table.setups thead th .teambar{display:inline-block;vertical-align:-3px;margin-right:8px}
-table.setups tr.grp th{background:var(--card-2);font-size:11.5px;padding-top:7px}
-table.setups td.n{font-weight:600}
+/* ---------------- driver detail ---------------- */
+.tabs{display:flex;flex-wrap:wrap;gap:4px 22px;border-bottom:1px solid var(--line)}
+.tab{border:0;background:none;padding:8px 0 10px;cursor:pointer;font-weight:600;font-size:15px;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px;display:inline-flex;align-items:center;gap:8px}
 .teambar{width:4px;height:18px;border-radius:2px;background:var(--tc)}
 .ts td{vertical-align:middle}
 .tsdrv{position:relative;padding-left:22px!important;min-width:190px}
@@ -239,158 +184,109 @@ table.setups td.n{font-weight:600}
 .delta{font-weight:700}.delta.d-neg{color:var(--green)}.delta.d-pos{color:var(--red)}
 .ts td.now{white-space:normal;min-width:250px}
 .besttime{font-size:17px;font-weight:700}
-.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--muted);padding:10px 16px}
-.legend b{font-weight:700}
-.note{font-size:13.5px;color:var(--ink-2);padding:10px 14px;background:var(--banner);border-radius:var(--r-sm);margin:12px 16px}
-.inc{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)}
-.inc .id{font-size:18px;font-weight:700;color:var(--muted)}
-.inc .tt{font-weight:600}
-
-/* ---------------- empty / toast ---------------- */
-.empty{padding:56px 0;display:grid;gap:14px;justify-items:start;max-width:760px}
-.empty h2{font-size:36px}
-.empty ol{color:var(--ink-2);line-height:1.7;margin:0;padding-left:20px}
-.hidden{display:none!important}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--page);padding:10px 18px;font-weight:600;z-index:60;border-radius:var(--r-sm)}
-.log{font:11px var(--mono);color:var(--dim);padding-top:22px}
-
-/* ---------------- race engineer ----------------
-   The original app's RaceEngineer component (F1_Race_Engineer src/components/RaceEngineer.tsx), dark in both
-   themes, laid out in two columns so it fits one screen. Colours are its Tailwind ones. */
-body.eng-dark{background:#000;color:#f5f5f5}
-body.eng-dark .feeds,body.eng-dark #banners{display:none}
-body.eng-dark #engineerView>section{margin-top:10px;gap:10px}
-.tabs{display:flex;flex-wrap:wrap;gap:4px 22px;border-bottom:1px solid var(--line)}
-.tab{border:0;background:none;padding:8px 0 10px;cursor:pointer;font-weight:600;font-size:15px;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px;display:inline-flex;align-items:center;gap:8px}
+section.block.two.one{grid-template-columns:minmax(0,1fr)}
 .tab::before{content:"";width:4px;height:14px;border-radius:2px;background:var(--tc)}
 .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--red)}
 .tab:hover{color:var(--ink)}
-body.eng-dark .tabs{border-bottom-color:#262626}
-body.eng-dark .tab{color:#a3a3a3}
-body.eng-dark .tab[aria-selected="true"],body.eng-dark .tab:hover{color:#fff}
-body.eng-dark .tab .muted{color:#737373}
+.detail{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:980px){.detail{grid-template-columns:minmax(0,1fr)}}
+.sgroup{padding:12px 16px;border-bottom:1px solid var(--line)}
+.sgroup:last-child{border-bottom:0}
+.sgroup h4{margin:0 0 6px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:14px;margin:0}
+.kv dt{color:var(--ink-2)}.kv dd{margin:0;font-weight:700;text-align:right}
+.note{font-size:13.5px;color:var(--ink-2);padding:10px 14px;background:#fff5e8;border-radius:var(--r-sm);margin:12px 16px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 12px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--card)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+tbody tr:last-child td{border-bottom:0}
+tr.pit td{background:#eef3fd!important}
+.vbar{display:inline-block;height:5px;border-radius:3px;background:var(--line-2);vertical-align:middle;margin-left:8px}
+.corner-h{text-align:right}
+.corner-h small{display:block;color:var(--dim);font-size:11px;letter-spacing:.02em;text-transform:none}
+.seg{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap;background:var(--card);padding:3px;border-radius:var(--r-sm)}
+.seg button{border:0;background:transparent;padding:5px 12px;cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-2);border-radius:6px}
+.seg button[aria-pressed="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(21,21,30,.12)}
+.dev{font-size:11.5px;color:var(--muted);margin-left:4px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--muted);padding:10px 16px}
+.legend b{font-weight:700}
+
+/* ---------------- race engineer ---------------- */
+#engTabs{margin-bottom:2px}
+.eng{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){.eng{grid-template-columns:minmax(0,1fr)}}
+.eng-col{display:grid;gap:16px;min-width:0}
+.brief .body{padding:14px 16px}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--red)}
+.headline{font-size:26px;font-weight:700;line-height:1.15;margin-top:2px;text-wrap:balance}
+.brief p{margin:6px 0 0;color:var(--ink-2);max-width:70ch}
+.calls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;border-top:1px solid var(--line)}
+.calls>div{padding:12px 16px;min-width:0}
+.calls>div+div{border-left:1px solid var(--line)}
+.calls dt{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.calls dd{margin:2px 0 0;font-weight:700;font-size:16px}
+@media (max-width:620px){.calls{grid-template-columns:minmax(0,1fr)}.calls>div+div{border-left:0;border-top:1px solid var(--line)}}
+.gauge{padding:14px 16px 16px}
+.gscale{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.gtrack{position:relative;height:12px;background:var(--card-2);border-radius:6px;overflow:hidden}
+.gtrack .mid{position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--ink-2);z-index:1}
+.gtrack .fill{position:absolute;top:0;bottom:0}
+.fill.os{background:var(--red)}.fill.us{background:var(--amber)}
+.bal{font-weight:700;margin-left:auto}.bal.os{color:var(--red)}.bal.us{color:var(--amber)}.bal.ok{color:var(--green)}
+.issue{display:grid;grid-template-columns:4px minmax(0,1fr);gap:12px;padding:10px 16px 10px 0;border-top:1px solid var(--line)}
+.issue .s{border-radius:0 2px 2px 0;background:var(--blue)}
+.issue.danger .s{background:var(--red)}.issue.warning .s{background:var(--amber)}
+.issue b{display:block;font-size:14px}.issue span{font-size:13px;color:var(--ink-2)}
+.fbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;padding:12px 16px 16px}
+.fb{border:1px solid var(--line-2);background:var(--page);border-radius:var(--r-sm);padding:9px 12px;text-align:left;cursor:pointer;display:grid;gap:2px;align-content:start}
+.fb:hover{border-color:var(--ink)}
+.fb b{font-size:14px;line-height:1.25}.fb span{font-size:12.5px;color:var(--muted);line-height:1.35}
+.fb[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.fb[aria-pressed="true"] span{color:#c9c9d4}
+.recrow{padding:12px 16px;border-top:1px solid var(--line);display:grid;gap:6px}
+.rectop{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.rectop .l{font-weight:700;font-size:15px}
+.change{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.change .to{font-weight:700;font-size:17px}
+.dchip{font-weight:700;font-size:12.5px;padding:0 8px;line-height:20px;border-radius:999px;background:var(--card-2)}
+.recrow p{margin:0;font-size:13.5px;color:var(--ink-2)}
+.ok-state{padding:18px 16px;display:grid;gap:4px}
 .msgbox{padding:28px 0;display:grid;gap:10px;max-width:720px}
 .msgbox h3{font-size:24px}
 .msgbox p{margin:0;color:var(--ink-2)}
-body.eng-dark .msgbox h3{color:#fff}
-body.eng-dark .msgbox p{color:#d4d4d4}
-body.eng-dark .msgbox .muted{color:#a3a3a3}
-
-.re{font-family:var(--mono);color:#f5f5f5;background:#171717;border:1px solid #262626;border-radius:.75rem;padding:1.25rem;box-shadow:0 25px 50px -12px rgba(0,0,0,.25);margin-bottom:16px}
-.re *{box-sizing:border-box}
-.re h3,.re h4,.re h5,.re p,.re dl,.re dd{margin:0}
-.re button{font-family:var(--mono);cursor:pointer}
-.re svg{width:1rem;height:1rem;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.re-grid{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(0,1fr);gap:1.25rem}
-.re-col{min-width:0;display:flex;flex-direction:column;gap:1rem}
-.re-col>*{flex-shrink:0}
-@media (max-width:1023px){.re-grid{grid-template-columns:minmax(0,1fr)}}
-/* briefing */
-.re-brief{position:relative;overflow:hidden;border:1px solid rgba(14,116,144,.4);border-radius:.75rem;padding:1rem 1.25rem;
-  background:linear-gradient(to bottom right,rgba(8,51,68,.55),#0a0a0a,#0a0a0a)}
-.re-bh{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem;border-bottom:1px solid rgba(21,94,117,.2);padding-bottom:.75rem}
-.re-live{display:flex;align-items:center;gap:.5rem}
-.re-ping{position:relative;display:flex;width:.75rem;height:.75rem}
-.re-ping i{position:absolute;inset:0;border-radius:50%;background:#22d3ee;opacity:.75;animation:ping 1s cubic-bezier(0,0,.2,1) infinite}
-.re-ping b{position:relative;display:inline-flex;width:.75rem;height:.75rem;border-radius:50%;background:#06b6d4}
-@keyframes ping{75%,100%{transform:scale(2);opacity:0}}
-@media (prefers-reduced-motion:reduce){.re-ping i{animation:none}}
-.re-lbl{display:flex;align-items:center;gap:.375rem;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#67e8f9}
-.re-pill{border:1px solid #404040;background:#171717;border-radius:999px;padding:.125rem .5rem;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.025em;color:#e5e5e5}
-.re-speak{min-height:2.25rem;padding:.375rem .75rem;border-radius:.375rem;font-size:.75rem;font-weight:700;display:flex;align-items:center;gap:.375rem;
-  background:#262626;color:#e5e5e5;border:1px solid #404040}
-.re-speak:hover{background:#404040}
-.re-speak.on{background:rgba(239,68,68,.2);color:#f87171;border-color:rgba(239,68,68,.5)}
-.re-speak svg{width:.875rem;height:.875rem}
-.re-bb{padding:1rem 0}
-.re-eyebrow{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:#06b6d4}
-.re-head{margin-top:.25rem!important;font-family:var(--mono);font-size:1.5rem;line-height:2rem;font-weight:900;letter-spacing:-.025em;color:#fff}
-.re-head.checking-msg{color:#ff2a2a}
-.re-rat{margin-top:.375rem!important;font-size:.875rem;line-height:1.625;color:#a3a3a3;max-width:56rem}
-.re-calls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-block:1px solid #262626;background:rgba(0,0,0,.25)}
-.re-calls>div{padding:.875rem;min-width:0}
-.re-calls>div+div{border-left:1px solid #262626}
-.re-calls dt{display:flex;align-items:center;gap:.375rem;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#737373}
-.re-calls dt svg{width:.875rem;height:.875rem}
-.re-calls dd{margin-top:.25rem!important;font-size:.875rem;font-weight:700;color:#fff;font-family:var(--font)}
-/* balance */
-.re-card{background:#0a0a0a;padding:1rem;border-radius:.75rem;border:1px solid #262626;display:grid;gap:.75rem}
-.re-balh{display:flex;align-items:center;justify-content:space-between;gap:.5rem;font-size:.75rem}
-.re-balh>span:first-child{color:#a3a3a3}
-.re-badge{font-weight:700;padding:.125rem .5rem;border-radius:.25rem;border:1px solid}
-.re-badge.os{background:rgba(69,10,10,.8);color:#f87171;border-color:#991b1b}
-.re-badge.us{background:rgba(69,26,3,.8);color:#fbbf24;border-color:#92400e}
-.re-badge.ok{background:rgba(2,44,34,.8);color:#34d399;border-color:#065f46}
-.re-scale{display:flex;justify-content:space-between;font-size:10px;font-weight:700;margin-bottom:.25rem}
-.re-track{position:relative;height:.75rem;width:100%;background:#262626;border-radius:999px;overflow:hidden}
-.re-track .mid{position:absolute;left:50%;top:0;bottom:0;width:.125rem;background:#737373;z-index:1}
-.re-track .fill{position:absolute;top:0;bottom:0;transition:all .3s}
-.re-issues{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem;padding-top:.5rem;border-top:1px solid rgba(38,38,38,.8)}
-.re-issue{font-size:.75rem;padding:.625rem;border-radius:.25rem;background:#171717;border:1px solid #262626;display:flex;align-items:flex-start;gap:.5rem}
-.re-issue svg{margin-top:.125rem}
-.re-issue b{display:block;color:#e5e5e5}
-.re-issue span{color:#a3a3a3;font-size:11px}
-/* feedback */
-.re-fbh{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.5rem}
-.re-fbh h4{display:flex;align-items:center;gap:.375rem;font-size:.75rem;text-transform:uppercase;font-weight:700;color:#d4d4d4}
-.re-fbh h4 svg{color:#22d3ee}
-.re-fbh span{font-size:11px;color:#737373;text-align:right}
-.re-fbgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}
-@media (min-width:1280px){.re-fbgrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
-.re-fb{padding:.625rem;border-radius:.5rem;border:1px solid #262626;text-align:left;background:#0a0a0a;color:#a3a3a3;transition:all .15s}
-.re-fb:hover{border-color:#404040;color:#d4d4d4}
-.re-fb[aria-pressed="true"]{background:rgba(8,51,68,.6);border-color:#06b6d4;color:#fff;box-shadow:0 0 10px rgba(6,182,212,.2)}
-.re-fb b{display:block;font-size:.75rem}
-.re-fb span{display:block;font-size:10px;color:#737373;margin-top:.125rem;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-family:var(--font)}
-/* setup tabs */
-.re-right{display:flex;flex-direction:column;min-height:0}
-.re-tabs{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem;border-bottom:1px solid #262626;padding-bottom:.5rem}
-.re-tabs>div{display:flex;flex-wrap:wrap;gap:.5rem}
-.re-tab{padding:.375rem 1rem;border-radius:.375rem;font-size:.75rem;font-weight:700;border:0;background:#262626;color:#a3a3a3;transition:color .15s}
-.re-tab:hover{color:#fff}
-.re-tab[aria-selected="true"]{background:#06b6d4;color:#000}
-.re-copy{padding:.375rem .75rem;background:#262626;color:#e5e5e5;border:0;border-radius:.375rem;font-size:.75rem;display:flex;align-items:center;gap:.375rem}
-.re-copy:hover{background:#404040}
-.re-copy svg{width:.875rem;height:.875rem}
-.re-copy .ok{color:#34d399}
-.re-body{margin-top:.75rem;display:grid;gap:.75rem;align-content:start}
-.re-rec{background:#0a0a0a;padding:1rem;border-radius:.75rem;border:1px solid #262626;display:grid;gap:.5rem;transition:border-color .15s}
-.re-rec:hover{border-color:#404040}
-.re-rech{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem}
-.re-rech>div{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}
-.re-cat{padding:.125rem .5rem;border-radius:.25rem;font-size:10px;text-transform:uppercase;background:#262626;color:#a3a3a3}
-.re-rl{font-size:.875rem;font-weight:700;color:#fff}
-.re-vals{font-size:.875rem;gap:.75rem!important}
-.re-vals .cur{color:#a3a3a3}.re-vals .cur b{color:#fff}
-.re-vals svg{color:#22d3ee}
-.re-vals .to{color:#22d3ee;font-weight:700}
-.re-delta{padding:.125rem .5rem;border-radius:.25rem;font-size:.75rem;font-weight:700;border:1px solid}
-.re-delta.up{background:#022c22;color:#34d399;border-color:#065f46}
-.re-delta.down{background:#450a0a;color:#f87171;border-color:#991b1b}
-.re-why{font-size:.75rem;color:#d4d4d4;background:rgba(23,23,23,.6);padding:.625rem;border-radius:.5rem;border:1px solid rgba(38,38,38,.6);line-height:1.5}
-.re-why b{color:#22d3ee;font-weight:600}
-.re-ok{background:#0a0a0a;padding:1.5rem;border-radius:.75rem;border:1px solid #262626;text-align:center;display:grid;gap:.5rem;justify-items:center}
-.re-ok svg{width:2rem;height:2rem;color:#34d399}
-.re-ok b{font-size:.875rem;color:#fff}
-.re-ok p{font-size:.75rem;color:#a3a3a3;max-width:28rem}
-.re-sheet{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;font-size:.75rem}
-.re-grp{background:#0a0a0a;padding:1rem;border-radius:.75rem;border:1px solid #262626;display:grid;gap:.5rem;align-content:start}
-.re-grp h5{font-weight:700;color:#22d3ee;text-transform:uppercase;border-bottom:1px solid #262626;padding-bottom:.375rem;display:flex;justify-content:space-between;font-size:.75rem}
-.re-grp h5 .rng{font-size:10px;color:#737373}
-.re-kv{display:flex;justify-content:space-between;align-items:center;padding:.125rem 0}
-.re-kv>span{color:#a3a3a3}
-.re-kv>b{color:#fff;background:#171717;padding:.125rem .5rem;border-radius:.25rem;border:1px solid #262626}
-
-/* ---------------- my telemetry ----------------
-   The original app's one-screen pit wall (F1_Race_Engineer c573a17: PitWallOverview.tsx + globals.css) for the
-   selected driver, with speed, rpm, gear, throttle and brake on one dial. The pit-* rules are copied as they are;
-   the short classes before them stand in for the Tailwind utilities the component uses. */
+.tyres4{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:12px 16px 16px}
+.tc{background:var(--page);border-radius:var(--r-sm);padding:10px 12px;display:grid;gap:3px;border-top:4px solid var(--line-2);min-width:0}
+.tc.cold{border-top-color:var(--blue)}.tc.ok{border-top-color:var(--green)}.tc.warm{border-top-color:var(--amber)}.tc.hot{border-top-color:var(--red)}
+.tc .corner{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.tc .core{font-size:26px;font-weight:700;line-height:1.1}
+.bt.cold{color:var(--blue)}.bt.ok{color:var(--green)}.bt.warm{color:var(--amber)}.bt.hot{color:var(--red)}
+table.sheet td,table.sheet th{padding:6px 16px}
+table.sheet tr.grp th{background:var(--card-2);padding-top:8px}
+table.sheet tr.chg td{background:#eaf6ef}
+table.sheet tr.chg td:last-child{color:var(--green)}
 .engbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 16px}
 .engbar .tabs{flex:1;min-width:0}
-.engpane{display:flex;gap:2px;padding:3px;border-radius:var(--r-sm);background:#111214}
-.engpane button{border:0;background:transparent;padding:5px 12px;cursor:pointer;font:600 12px var(--mono);color:#a3a3a3;border-radius:6px;white-space:nowrap}
-.engpane button:hover{color:#fff}
-.engpane button[aria-pressed="true"]{background:#083344;color:#67e8f9}
+.engbar .seg{margin-left:0}
+
+/* ---------------- race engineer, compact: the original's one-screen pit wall ----------------
+   F1_Race_Engineer c573a17 (PitWallOverview.tsx + globals.css). The pit-* rules are copied as they are;
+   the short classes before them stand in for the Tailwind utilities the component uses. */
+body.pw-compact{background:#000;color:#f5f5f5}
+body.pw-compact .feeds,body.pw-compact #banners,body.pw-compact #engHead{display:none}
+body.pw-compact #engineerView>section{margin-top:8px;gap:8px}
+body.pw-compact .tabs{border-bottom-color:#262626}
+body.pw-compact .tab{color:#a3a3a3}
+body.pw-compact .tab[aria-selected="true"],body.pw-compact .tab:hover{color:#fff}
+body.pw-compact .tab .muted{color:#737373}
+body.pw-compact .seg{background:#111214}
+body.pw-compact .seg button{color:#a3a3a3;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:12px}
+body.pw-compact .seg button:hover{color:#fff}
+body.pw-compact .seg button[aria-pressed="true"]{background:#083344;color:#67e8f9;box-shadow:none}
+body.pw-compact .msgbox h3{color:#fff}
+body.pw-compact .msgbox p{color:#d4d4d4}
+body.pw-compact .msgbox .muted{color:#a3a3a3}
 .pwc{width:100%;max-width:80rem;margin-inline:auto;color:#f5f5f5;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
 .pwc h2,.pwc p,.pwc dl,.pwc dd,.pwc ol,.pwc li{margin:0;padding:0}
 .pwc h2{line-height:inherit}
@@ -471,12 +367,15 @@ body.eng-dark .msgbox .muted{color:#a3a3a3}
 .pit-wall-laps li strong { color: #fff; text-align: right; }
 
 @media (min-width: 1024px) and (min-height: 650px) {
-  body.eng-fit .pwc { flex: 1; min-height: 0; padding: .75rem 0; }
+  /* .pit-wall-page / .pit-wall-main in the original: the page is exactly one screen high */
+  body.pw-fit { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 0; }
+  body.pw-fit #engineerView, body.pw-fit #engineerView > section, body.pw-fit #engBody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  body.pw-fit .pwc { flex: 1; min-height: 0; padding: .75rem 0; }
   .pit-wall-grid { height: 100%; grid-template-rows: 6.25rem minmax(0, 1fr) 5rem; }
 }
 
 @media (min-width: 1024px) and (min-height: 650px) and (max-height: 850px) {
-  body.eng-fit .pwc { padding: .5rem 0; }
+  body.pw-fit .pwc { padding: .5rem 0; }
   .pit-wall-grid { gap: .5rem; grid-template-rows: 4.75rem minmax(0, 1fr) 4.25rem; }
   .pit-panel { padding: .6rem; }
   .pit-panel-heading { padding-bottom: .35rem; }
@@ -530,7 +429,7 @@ body.eng-dark .msgbox .muted{color:#a3a3a3}
 .pw-gauge .mid { fill: #fff; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .pw-gauge .unit { fill: #a3a3a3; font-size: 7.5px; letter-spacing: .1em; }
 @media (min-width: 1024px) and (min-height: 650px) {
-  body.eng-fit .pw-gauge svg { width: auto; height: 100%; max-width: 100%; }
+  body.pw-fit .pw-gauge svg { width: auto; height: 100%; max-width: 100%; }
 }
 
 /* ---------------- empty / dialog / toast ---------------- */
@@ -544,43 +443,6 @@ dialog::backdrop{background:rgba(21,21,30,.45)}
 dialog .dh{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid var(--line)}
 dialog pre{margin:0;padding:18px;white-space:pre-wrap;font:12.5px/1.55 ui-monospace,Consolas,monospace;max-height:70vh;overflow:auto;color:var(--ink-2);background:var(--card)}
 .log{font:11px ui-monospace,Consolas,monospace;color:var(--dim);padding-top:22px}
-
-/* one screen on a laptop or desktop */
-@media (min-width:1024px) and (min-height:650px){
-  body.eng-fit{height:100dvh;overflow:hidden;display:flex;flex-direction:column;padding-bottom:0}
-  body.eng-fit #engineerView,body.eng-fit #engineerView>section,body.eng-fit #engBody{flex:1;min-height:0;display:flex;flex-direction:column}
-  body.eng-fit .re{flex:1;min-height:0;display:flex;flex-direction:column;padding:1rem}
-  body.eng-fit .re-grid{flex:1;min-height:0}
-  body.eng-fit .re-col{min-height:0;overflow-y:auto}
-  body.eng-fit .re-body{flex:1;min-height:0;overflow-y:auto;padding-right:2px}
-  body.eng-fit .re-bb{padding:.75rem 0}
-}
-/* shorter screens: the handling boxes keep their description in the tooltip, the cards tighten up */
-@media (min-width:1024px) and (min-height:650px) and (max-height:1000px){
-  body.eng-fit .re-fb span{display:none}
-  body.eng-fit .re-rec{padding:.75rem;gap:.4rem}
-  body.eng-fit .re-why{padding:.45rem .6rem}
-}
-@media (min-width:1024px) and (min-height:650px) and (max-height:860px){
-  body.eng-fit .re{padding:.75rem}
-  body.eng-fit .re-grid{gap:.875rem}
-  body.eng-fit .re-col{gap:.5rem}
-  body.eng-fit .re-brief{padding:.6rem .9rem}
-  body.eng-fit .re-bh{padding-bottom:.4rem}
-  body.eng-fit .re-speak{min-height:2rem}
-  body.eng-fit .re-bb{padding:.45rem 0}
-  body.eng-fit .re-head{font-size:1.25rem;line-height:1.6rem}
-  body.eng-fit .re-rat{font-size:.8rem;line-height:1.45}
-  body.eng-fit .re-calls>div{padding:.5rem .75rem}
-  body.eng-fit .re-card{padding:.6rem .75rem;gap:.4rem}
-  body.eng-fit .re-issue{padding:.35rem .5rem}
-  body.eng-fit .re-fbgrid{gap:.4rem}
-  body.eng-fit .re-fb{padding:.35rem .55rem}
-  body.eng-fit .re-rec{padding:.6rem .75rem;gap:.35rem}
-  body.eng-fit .re-why{font-size:.7rem;padding:.4rem .55rem;line-height:1.4}
-  body.eng-fit .re-tab{padding:.35rem .7rem;font-size:.7rem}
-  body.eng-fit .re-grp{padding:.75rem;gap:.35rem}
-}
 </style>
 </head>
 <body>
@@ -589,10 +451,8 @@ dialog pre{margin:0;padding:18px;white-space:pre-wrap;font:12.5px/1.55 ui-monosp
   <div class="race" id="raceInfo"><span class="muted up">Waiting for telemetry</span></div>
   <div class="actions">
     <span class="rec" id="rec">IDLE</span>
-    <button class="hammer" id="hammerBtn" type="button" aria-pressed="false" title="Hammer Time: serious mode. Turns off the jokes, tags and banter for everyone."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/></svg>Hammer Time</button>
-    <button class="iconbtn" id="themeBtn" type="button" aria-label="Dark mode" title="Dark mode"></button>
     <nav class="views" id="views" aria-label="Views"><button type="button" data-view="live" aria-pressed="true">Pit wall</button><button type="button" data-view="engineer" aria-pressed="false">Engineer</button><button type="button" data-view="sessions" aria-pressed="false">Sessions</button></nav>
-    <button class="btn red" id="flagBtn" type="button" title="Mark this moment as an incident for the race report">Flag incident<kbd>F</kbd></button>
+    <button class="btn red" id="flagBtn" type="button" title="Save the last 20 s and the next 10 s as an incident">Flag incident<kbd>F</kbd></button>
   </div>
 </header>
 <div class="feeds"><span class="chip">Telemetry from</span><div class="sources" id="sources"><span class="sub">No games connected yet</span></div></div>
@@ -610,30 +470,39 @@ dialog pre{margin:0;padding:18px;white-space:pre-wrap;font:12.5px/1.55 ui-monosp
   </div>
 
   <div id="liveContent">
-    <section class="block hidden" id="lovelySection"></section>
-
     <section class="block hidden" id="tsSection">
-      <div class="shead"><h2>Timesheet</h2><p>Each human driver's fastest valid lap and what went into it: tyre, ERS, fuel, traffic and corners cut. The last columns show what they're doing right now.</p><div class="mald maldslot"></div></div>
+      <div class="shead"><h2>Timesheet</h2><p>Each human driver's fastest valid lap and what went into it: tyre, ERS, fuel, traffic and corners cut. The last columns show what they're doing right now.</p></div>
       <div class="panel scroll" id="timesheet"></div>
       <div class="legend" style="padding:0"><span><b class="t-purple">Purple</b> fastest of the session</span><span><b>Fuel</b> at the start of the fastest lap / when leaving the pits for that run</span><span><b>Traffic</b> share of the lap within 1 s behind another car</span><span><b>Cuts</b> excursions over the inside of a corner (2+ wheels beyond the kerb); the game's lenient setting ignores most</span></div>
     </section>
 
     <section class="block" id="raceSection">
-      <div class="shead"><h2>Drivers</h2><p>Live car data for every human driver: what the in-game timing doesn't show.</p><div class="mald maldslot"></div></div>
-      <div class="lhead" aria-hidden="true"><div title="Position, and the interval to the next human driver ahead (AI cars don't count)">Pos</div><div>Driver</div><div title="Average wear, and the tyre with its age in laps">Tyres</div><div title="Fastest lap, last lap below">Fastest lap</div><div>Top speed</div><div title="Front wing damage, worst side; front-left, front-right / rear wing below">Wing damage</div><div title="Fuel mix, and laps of fuel to spare (+) or short (−)">Fuel mix</div><div>ERS</div><div title="All four wheels beyond the white lines">Wheels off</div></div>
+      <div class="shead"><h2>Drivers</h2><p>Live car data for every human driver: what the in-game timing doesn't show.</p></div>
+      <div class="lhead" aria-hidden="true"><div>Pos</div><div>Driver</div><div>Tyre</div><div>Avg wear</div><div title="Front wing damage, worst side; front-left, front-right / rear wing below">Wing damage</div><div>Fuel mix</div><div>ERS</div><div>Last lap</div><div>Fastest lap</div><div title="All four wheels beyond the kerbs">4 wheels off</div></div>
       <div class="live" id="live"></div>
     </section>
 
-    <section class="block" id="feedSection">
+    <section class="block two" id="feedSection">
       <div class="panel">
         <div class="phead"><h3>Race control</h3><div class="filters" id="feedFilters"></div></div>
         <div class="feed" id="feed"></div>
       </div>
+      <div class="panel" id="incPanel">
+        <div class="phead"><h3>Incidents</h3><span class="saved">Auto-saved for analysis</span></div>
+        <div id="incidents"></div>
+      </div>
     </section>
 
     <section class="block">
-      <div class="shead"><h2>Setups</h2><p>Every human driver's car setup, side by side. The game only shares a car's setup with its own driver, so it shows for drivers whose game streams to the pit wall.</p></div>
-      <div class="panel scroll" id="setups"></div>
+      <div class="shead"><h2>Driver profile</h2><p>Setup and average corner behaviour. Averages use clean laps: no pit stop, no incident, no safety car, not lap 1.</p></div>
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div class="detail" id="detail"></div>
+    </section>
+
+    <section class="block">
+      <div class="shead"><h2>Lap by lap</h2><p id="lblNote">Every completed lap for the selected driver.</p>
+        <div class="seg" id="metricSeg" role="group" aria-label="Corner metric"></div></div>
+      <div class="panel scroll" id="laps"></div>
     </section>
     <div class="log" id="log"></div>
   </div>
@@ -641,8 +510,9 @@ dialog pre{margin:0;padding:18px;white-space:pre-wrap;font:12.5px/1.55 ui-monosp
 
 <main id="engineerView" class="hidden">
   <section class="block">
+    <div class="shead" id="engHead"><h2>Race engineer</h2><p>Setup advice for one driver, worked out from their own car's telemetry and how the car feels to them. Pick yourself; this device remembers.</p></div>
     <div class="engbar"><div class="tabs" id="engTabs" role="tablist"></div>
-      <div class="engpane" id="engPane" role="group" aria-label="Engineer view"><button type="button" data-engpane="engineer" aria-pressed="true">Engineer</button><button type="button" data-engpane="telemetry" aria-pressed="false">My telemetry</button></div></div>
+      <div class="seg" id="engLayout" role="group" aria-label="Engineer layout"><button type="button" data-englayout="compact" aria-pressed="true">Compact</button><button type="button" data-englayout="detailed" aria-pressed="false">Detailed</button></div></div>
     <div id="engBody"></div>
   </section>
 </main>
@@ -657,6 +527,14 @@ dialog pre{margin:0;padding:18px;white-space:pre-wrap;font:12.5px/1.55 ui-monosp
   <section class="block" id="sessDetail"></section>
 </main>
 
+<dialog id="dlg">
+  <div class="dh"><h3 id="dlgTitle" style="font-size:20px">Incident</h3><span class="spacer"></span>
+    <button class="btn small red" id="dlgCopy" type="button">Copy prompt</button>
+    <a class="btn small" id="dlgData" href="#" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">Data</a>
+    <button class="btn small" id="dlgClose" type="button">Close</button></div>
+  <pre id="dlgBody"></pre>
+</dialog>
+
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -664,113 +542,88 @@ const ft=s=>{if(s==null||s<=0)return '–';const m=Math.floor(s/60);const r=(s-6
 const mb=n=>n>=1e9?(n/1e9).toFixed(2)+' GB':(n/1e6).toFixed(1)+' MB';
 const letter=t=>{t=String(t||'');for(const[k,v]of [['Super soft','S'],['Soft','S'],['Medium','M'],['Hard','H'],['Inter','I'],['Wet','W']])if(t.startsWith(k))return v;return '?';};
 const tyre=(t,sm)=>`<span class="tyre ${letter(t)}${sm?' sm':''}" title="${esc(t)}">${letter(t)}</span>`;
-let S=null,D=null,detailVersion=-1,feedFilter='drivers',lastFeed='',canControl=true,lovelySeen='';
-try{feedFilter=localStorage.getItem('pw.feed2')||'drivers';}catch(e){}
+let S=null,D=null,detailVersion=-1,sel=null,metric='min_v',feedFilter='drivers',lastFeed='',canControl=true;
+try{sel=+localStorage.getItem('pw.sel')||null;metric=localStorage.getItem('pw.metric')||'min_v';feedFilter=localStorage.getItem('pw.feed2')||'drivers';}catch(e){}
 
 function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),3200);}
 async function post(u,b){try{const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});const j=await r.json();if(!r.ok){toast(j.error||'Request failed');return null;}return j;}catch(e){toast('Could not reach the tracker');return null;}}
-const FUN=()=>(S&&S.fun)||{};
-const HAMMER=()=>!!FUN().hammer;
-
-/* ================= theme ================= */
-const MOON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>';
-const SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>';
-function paintTheme(){const dark=document.documentElement.dataset.theme==='dark';const b=$('themeBtn');b.innerHTML=dark?SUN:MOON;b.setAttribute('aria-label',dark?'Light mode':'Dark mode');b.title=dark?'Light mode':'Dark mode';}
-$('themeBtn').onclick=()=>{const t=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=t;try{localStorage.setItem('pw.theme',t);}catch(e){}paintTheme();};
-paintTheme();
 
 /* ================= live ================= */
 function render(){
   if(!S)return;
-  const s=S.session,a=S.app||{},F=FUN(),hammer=HAMMER();
-  $('hammerBtn').setAttribute('aria-pressed',String(hammer));
+  const s=S.session,a=S.app||{};
   $('emptyState').classList.toggle('hidden',!!s);$('liveContent').classList.toggle('hidden',!s);
   $('emptyAddr').textContent=`Listening on UDP port ${a.udp_port||20777}.${a.packets?' '+a.packets.toLocaleString()+' packets received.':''}`;
   if(s){
     const lap=s.is_race?`<div class="lapbox"><span class="l">LAP</span><b class="num">${Math.min(s.lap,s.total_laps)||'–'}</b><i>/ ${s.total_laps}</i></div>`:
       (s.time_left!=null?`<div class="lapbox"><span class="l">LEFT</span><b class="num">${Math.floor(s.time_left/60)}:${String(s.time_left%60).padStart(2,'0')}</b></div>`:'');
-    const sc=s.sc==='Virtual Safety Car'&&!hammer?'Bernd is out for a drive':s.sc;
     $('raceInfo').innerHTML=`<div><div class="trk">${esc(s.track)}</div><div class="typ">${esc(s.type)}${s.clock?' · '+esc(s.clock):''}</div></div>${lap}
-      ${sc?`<span class="flagmsg" title="${esc(s.sc)}">${esc(sc)}</span>`:''}${s.chequered?'<span class="flagmsg fin" title="Chequered flag">.</span>':''}
+      ${s.sc?`<span class="flagmsg">${esc(s.sc)}</span>`:''}${s.chequered?'<span class="flagmsg fin" title="Chequered flag">.</span>':''}
       ${s.paused?'<span class="chip">Paused</span>':''}<span class="chip">${esc(s.weather)} · Track ${s.track_temp??'–'}° · Air ${s.air_temp??'–'}°</span>`;
   }
   const stale=a.last_packet_age!=null&&a.last_packet_age>3;
   const teamOf=n=>((S.live||[]).find(d=>d.name===n)||{}).color||'#888';
-  $('sources').innerHTML=(S.sources||[]).length?(S.sources||[]).map(x=>`<span class="src" style="--c:${teamOf(x.name)}" title="${esc(x.key)} · ${x.packets.toLocaleString()} packets${x.primary?' · primary':''}"><span class="dot ${x.age>5?'bad':x.age>2?'warn':''}"></span>${esc(x.name)}</span>`).join(''):'<span class="sub">No games connected yet</span>';
+  $('sources').innerHTML=(S.sources||[]).length?'':'<span class="sub">No games connected yet</span>';
+  if((S.sources||[]).length)$('sources').innerHTML=(S.sources||[]).map(x=>`<span class="src" style="--c:${teamOf(x.name)}" title="${esc(x.key)} · ${x.packets.toLocaleString()} packets${x.primary?' · primary':''}"><span class="dot ${x.age>5?'bad':x.age>2?'warn':''}"></span>${esc(x.name)}${x.car==null||x.name==='spectator'?'':''}</span>`).join('');
   const rec=$('rec');
   if(a.recording_raw){rec.className='rec on';rec.textContent=`REC ${mb(a.raw_bytes)}${a.keep_current_raw?' · KEPT':''}`;}
   else{rec.className='rec';rec.textContent=stale&&s?`NO DATA ${Math.round(a.last_packet_age)}S`:(a.mode==='replay'?'REPLAY':'IDLE');}
   const b=[],pend=(S.retention&&S.retention.pending)||[];
-  if(pend.length){const tot=pend.reduce((x,p)=>x+p.raw_bytes+(p.incident_bytes||0),0);b.push(`<div class="banner"><b>Earlier raw data (${mb(tot)}) deletes in ${Math.min(...pend.map(p=>p.delete_in_s))}s</b><span class="muted">Summaries are always kept.</span><span class="spacer"></span><button class="btn small" type="button" data-act="keepPending">Keep it</button></div>`);}
+  if(pend.length){const tot=pend.reduce((x,p)=>x+p.raw_bytes+(p.incident_bytes||0),0);const withInc=pend.some(p=>p.incident_bytes);b.push(`<div class="banner"><b>Earlier raw data${withInc?' and incidents':''} (${mb(tot)}) deletes in ${Math.min(...pend.map(p=>p.delete_in_s))}s</b><span class="muted">Summaries are always kept.</span><span class="spacer"></span><button class="btn small" type="button" data-act="keepPending">Keep it</button></div>`);}
   if(s&&s.ended&&s.id)b.push(`<div class="banner fin"><b>Session complete</b><span class="muted">Summary saved.</span><span class="spacer"></span><button class="btn small" type="button" data-act="openSummary" data-id="${esc(s.id)}">View summary</button></div>`);
   if(s&&stale&&!s.ended)b.push(`<div class="banner"><b>No telemetry for ${Math.round(a.last_packet_age)}s</b><span class="muted">Paused, in the menus, or the connection dropped.</span></div>`);
   $('banners').innerHTML=b.join('');
   if(view==='engineer')renderEngineer();
   if(!s)return;
   const race=s.kind==='race';
-  const SL=!hammer&&F.simply_lovely,slKey=SL?SL.name+'|'+SL.why+'|'+s.uid:'';
-  const lovely=!!SL&&lovelySeen!==slKey;
-  $('lovelySection').classList.toggle('hidden',!lovely);
-  $('raceSection').classList.toggle('hidden',!race||lovely);$('tsSection').classList.toggle('hidden',race||lovely);
-  if(lovely)$('lovelySection').innerHTML=`<div class="lovely"><div class="q">Simply lovely</div><div class="who"><b>${esc(SL.name)}</b> · ${esc(SL.why)}${SL.time?' · '+ft(SL.time):''}</div><button class="btn small" type="button" data-act="lovelyHide" data-key="${esc(slKey)}">Show the timing</button></div>`;
-  const md=F.maldonado;
-  document.querySelectorAll('.maldslot').forEach(el=>{el.innerHTML=md&&!hammer?`<b class="num">${md.days}</b><span>day${md.days===1?'':'s'} since the last Maldonado<br><span class="muted">${esc(md.name)}${md.track?', '+esc(md.track):''}</span></span>`:'';el.title='Resets when a human driver crashes on their own';});
+  $('raceSection').classList.toggle('hidden',!race);$('tsSection').classList.toggle('hidden',race);
+  const showInc=race||(S.incidents||[]).length>0;
+  $('incPanel').classList.toggle('hidden',!showInc);$('feedSection').classList.toggle('one',!showInc);
   if(race)renderLive();else renderTimesheet();
-  renderFeed();
-  if(a.detail_version!==detailVersion){detailVersion=a.detail_version;fetch('/api/detail').then(r=>r.json()).then(j=>{D=j;renderSetups(D,'setups');}).catch(()=>{});}
+  renderFeed();if(showInc)renderIncidents();
+  if(a.detail_version!==detailVersion){detailVersion=a.detail_version;fetch('/api/detail').then(r=>r.json()).then(j=>{D=j;renderDetail(LIVE_T);}).catch(()=>{});}
   $('log').innerHTML=(a.log||[]).map(esc).join('<br>');
 }
 
 const OWN_DOT='<span class="dot own" title="Receiving telemetry from this driver’s own game" aria-label="Receiving telemetry from this driver’s own game"></span>';
-const TAG_ICON={smooth:'🎷',lawnmower:'🚜',mr_saturday:'📅',photo:'📸'};
-function driverExtras(name){
-  const F=FUN(),key=String(name||'').toLowerCase(),p=(F.standings||{})[key];
-  const tags=HAMMER()?[]:((F.tags||{})[key]||[]);
-  return {pts:p?p.points:0,tags:tags.map(t=>`<span class="ftag" title="${esc(t.title)}">${TAG_ICON[t.id]||''} ${esc(t.label)}</span>`)};
-}
 function renderLive(){
-  const rows=S.live||[],hammer=HAMMER(),chk=FUN().checking;
-  const bests=rows.map(d=>d.best).filter(Boolean),fastest=bests.length?Math.min(...bests):null;
-  const tops=rows.map(d=>d.top_speed||0),topv=Math.max(0,...tops),hg=S.human_gaps||{};
-  // interval to the next human ahead on the road, ignoring AI cars
-  const ivl=d=>{const g=hg[d.idx];if(!g)return '';
-    const v=g.laps>=1?`+${g.laps} lap${g.laps>1?'s':''}`:g.s!=null?`+${g.s.toFixed(1)}`:'';
-    return v?`<span class="iv num" title="Interval to ${esc(g.to)}, the next human driver ahead">${v}</span>`:'';};
+  const rows=S.live||[];
   $('live').innerHTML=rows.map(d=>{
     const out=['retired','disqualified','not classified','did not finish'].includes(d.state);
-    const x=driverExtras(d.name),tags=[...x.tags];
-    if(d.pit)tags.push(`<span class="tag box">${hammer?'In pit':'Box, Box!'}</span>`);
+    const tags=[];
+    if(d.pit)tags.push('<span class="tag blue">Pit</span>');
     if(d.state&&d.state!=='pit')tags.push(`<span class="tag ${out?'red':'white'}">${esc(d.state)}</span>`);
     if(d.penalties)tags.push(`<span class="tag red">+${d.penalties}s</span>`);
     if(d.warnings)tags.push(`<span class="tag amber">${d.warnings} warn</span>`);
     if(d.invalid)tags.push('<span class="tag">Lap invalid</span>');
-    const wc=v=>v>=60?'t-red':v>=40?'t-yellow':'';const g=d.dmg||{};const dc=v=>v>=50?'t-red':v>=20?'t-yellow':'';
-    const head=`<div class="pos num">${d.pos||'–'}${ivl(d)}</div>
-      <div class="drv" style="--tc:${d.color}"><span class="n">${esc(d.name)}${d.own?OWN_DOT:''}</span><span class="t">${esc(d.team)} · <b class="num">${x.pts}</b> pts${d.own?'':' · via other game'}</span>${tags.length?`<span class="tags">${tags.join('')}</span>`:''}</div>`;
-    if(chk&&chk.idx===d.idx)return `<div class="lrow${d.pit?' pitting':''}">${head}<div class="checking" role="status">We are checking<span class="dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span><span>.</span><span>.</span></span></div></div>`;
-    const tyreCell=(d.puncture||[]).length?`<div class="tyrecell punct" data-l="Tyres"><span>PUNCTURE</span>${esc(d.puncture.join(' · '))}</div>`
-      :`<div class="tyrecell" data-l="Tyres"><span class="big num ${wc(d.wear_avg)}" title="Average tyre wear">${d.wear_avg==null?'–':Math.round(d.wear_avg)}<small>%</small></span><span class="tyre lg ${letter(d.tyre)}" title="${esc(d.tyre)}, ${d.tyre_age??'?'} laps old">${d.tyre_age??'–'}</span></div>`;
-    return `<div class="lrow${out?' out':''}${d.pit?' pitting':''}">${head}${tyreCell}
-      <div data-l="Fastest lap"><span class="big num ${d.best&&d.best===fastest?'t-purple':d.best?'t-green':''}" title="Fastest lap${d.best_lap?', lap '+d.best_lap:''}">${ft(d.best)}</span><span class="sub num ${d.last_valid?'':'inv'}" title="Last lap">${d.last?ft(d.last):''}</span></div>
-      <div data-l="Top speed"><span class="big num ${d.top_speed&&d.top_speed===topv?'t-purple':''}">${d.top_speed??'–'}</span><span class="sub">km/h</span></div>
-      <div class="wearcell" data-l="Wing damage"><span class="big num ${dc(Math.max(g.fl||0,g.fr||0))}">${Math.max(g.fl||0,g.fr||0)}<small>%</small></span>
+    const gap=d.pos===1?'Leader':d.laps_down?`+${d.laps_down} lap`:d.gap!=null?`+${d.gap.toFixed(1)}s`:'';
+    const w=d.wear||[];const wc=v=>v>=60?'t-red':v>=40?'t-yellow':'';const g=d.dmg||{};const dc=v=>v>=50?'t-red':v>=20?'t-yellow':'';
+    return `<div class="lrow${out?' out':''}">
+      <div class="pos num">${d.pos||'–'}</div>
+      <div class="drv" style="--tc:${d.color}"><span class="n">${esc(d.name)}${d.own?OWN_DOT:''}</span><span class="t">${esc(d.team)}${gap?' · '+gap:''}${d.own?'':' · via other game'}</span>${tags.length?`<span class="tags">${tags.join('')}</span>`:''}</div>
+      <div class="tyrecell" data-l="Tyre">${tyre(d.tyre)}<div><div style="font-weight:700">${esc(String(d.tyre).split(' (')[0])}</div><div class="sub">${d.tyre_age==null?'–':d.tyre_age===1?'1 lap old':d.tyre_age+' laps old'}</div></div></div>
+      <div class="wearcell" data-l="Avg wear"><span class="big num ${wc(d.wear_avg)}">${d.wear_avg??'–'}<span style="font-size:14px">%</span></span>
+        ${w.length?`<div class="wear4 num" title="Front-left, front-right / rear-left, rear-right"><span class="${wc(w[0])}">${w[0]}</span><span class="${wc(w[1])}">${w[1]}</span><span class="${wc(w[2])}">${w[2]}</span><span class="${wc(w[3])}">${w[3]}</span></div>`:''}</div>
+      <div class="wearcell" data-l="Wing damage"><span class="big num ${dc(Math.max(g.fl||0,g.fr||0))}">${Math.max(g.fl||0,g.fr||0)}<span style="font-size:14px">%</span></span>
         <div class="wing3 num" title="Front wing left, right / rear wing"><span class="${dc(g.fl)}">${g.fl??0}</span><span class="${dc(g.fr)}">${g.fr??0}</span><span class="${dc(g.rw)}">rear ${g.rw??0}</span></div></div>
-      <div data-l="Fuel mix"><span class="mix ${esc(d.mix)}">${esc(d.mix||'–')}</span><span class="sub num" title="Laps of fuel to spare (+) or short (−)">${d.fuel_surplus>=0?'+':'−'}${Math.abs(d.fuel_surplus).toFixed(1)} laps</span></div>
+      <div data-l="Fuel mix"><span class="mix ${esc(d.mix)}">${esc(d.mix||'–')}</span><span class="sub num">${d.fuel_kg} kg · ${d.fuel_surplus>=0?'+':''}${d.fuel_surplus} laps</span></div>
       <div class="ers" data-l="ERS"><div class="ersline"><b class="num">${Math.round(d.ers_pct)}%</b><span class="deploy${d.deploying?' on':''}">${d.deploying?'Deploying':'Harvesting'}</span></div>
         <div class="battery" title="Energy store ${d.ers_pct}%"><i style="width:${Math.min(100,d.ers_pct)}%"></i></div>
-        <span class="sub num">${esc(d.ers_mode||'')} · ${d.ers_lap_mj}/4 MJ</span></div>
-      <div data-l="Wheels off"><span class="big num ${d.track_limits>=10?'t-yellow':''}" title="All four wheels off this race">${d.track_limits}</span></div>
+        <span class="sub num">${esc(d.ers_mode||'')} mode · ${d.ers_lap_mj} / 4 MJ this lap</span></div>
+      <div data-l="Last lap"><span class="big num ${d.last_valid?'':'inv'}">${ft(d.last)}</span><span class="sub num">current ${ft(d.now)}</span></div>
+      <div data-l="Fastest lap"><span class="big num ${d.fastest?'t-purple':d.best?'t-green':''}">${ft(d.best)}</span><span class="sub">${d.best_lap?'lap '+d.best_lap:''}${d.fastest?' · fastest overall':''}</span></div>
+      <div class="tl" data-l="4 wheels off"><span class="big num ${d.track_limits>=10?'t-yellow':''}">${d.track_limits}</span><span class="sub">${d.track_limits_lap?`+${d.track_limits_lap} this lap`:'this race'}</span></div>
     </div>`;}).join('')||'<p class="muted">No human drivers detected yet.</p>';
 }
 
 function renderTimesheet(){
-  const rows=S.timesheet||[],hammer=HAMMER();
+  const rows=S.timesheet||[];
   const minOf=k=>Math.min(...rows.map(r=>r[k]||1e9));
   const bs={s1:minOf('s1'),s2:minOf('s2'),s3:minOf('s3')};
   const sec=(r,k)=>`<td class="n ${r[k]&&r[k]===bs[k]?'t-purple':''}">${r[k]?r[k].toFixed(3):'–'}</td>`;
   const status=r=>{
-    const st=r.pit?(hammer?'In pits':'Box, Box!'):r.status==='garage'?'Garage':r.status?r.status[0].toUpperCase()+r.status.slice(1):'';
-    const parts=[`<span class="tag ${r.pit?'box':r.status==='flying lap'?'blue':''}">${esc(st)}</span>`];
+    const st=r.pit?'In pits':r.status==='garage'?'Garage':r.status?r.status[0].toUpperCase()+r.status.slice(1):'';
+    const parts=[`<span class="tag ${r.status==='flying lap'?'blue':''}">${esc(st)}</span>`];
     if(!r.pit&&r.status!=='garage'&&r.now)parts.push(`<span class="num">${ft(r.now)}</span>`);
     if(r.delta!=null&&!r.pit)parts.push(`<span class="delta num ${r.delta<0?'d-neg':'d-pos'}">${r.delta<0?'−':'+'}${Math.abs(r.delta).toFixed(3)}</span>`);
     if(r.invalid)parts.push('<span class="tag">Invalid</span>');
@@ -778,8 +631,8 @@ function renderTimesheet(){
     return parts.join('');};
   $('timesheet').innerHTML=`<table class="ts"><thead><tr><th class="n">Pos</th><th>Driver</th><th class="n">Fastest lap</th><th class="n">Gap</th><th class="n">S1</th><th class="n">S2</th><th class="n">S3</th>
     <th>Tyre</th><th class="n">ERS used</th><th>Mix</th><th class="n">Fuel</th><th class="n">Traffic</th><th class="n">Cuts</th><th class="n">4 wheels off</th><th class="n">Laps <small class="muted">valid / timed</small></th><th class="n">Top km/h</th><th>Now</th></tr></thead><tbody>
-    ${rows.map(r=>{const x=driverExtras(r.name);return `<tr><td class="n" style="font-weight:700;font-size:16px">${r.pos??'–'}</td>
-      <td class="tsdrv" style="--tc:${r.color}"><b>${esc(r.name)}</b>${r.own?OWN_DOT:''}<div class="sub">${esc(r.team)} · <b class="num" style="color:var(--ink)">${x.pts}</b> pts${r.own?'':' · via other game'}</div>${x.tags.length?`<div class="tags">${x.tags.join('')}</div>`:''}</td>
+    ${rows.map(r=>`<tr><td class="n" style="font-weight:700;font-size:16px">${r.pos??'–'}</td>
+      <td class="tsdrv" style="--tc:${r.color}"><b>${esc(r.name)}</b>${r.own?OWN_DOT:''}<div class="sub">${esc(r.team)}${r.own?'':' · via other game'}</div></td>
       <td class="n"><span class="besttime num ${r.pos===1?'t-purple':''}">${ft(r.best)}</span><div class="sub">${r.best_lap?'lap '+r.best_lap:'no valid lap'}</div></td>
       <td class="n">${r.pos===1?'':r.gap!=null?'+'+r.gap.toFixed(3):'–'}</td>${sec(r,'s1')}${sec(r,'s2')}${sec(r,'s3')}
       <td>${tyre(r.tyre,true)} ${esc(String(r.tyre||'').split(' (')[0])} <span class="muted num">${r.tyre_age??''}</span></td>
@@ -791,14 +644,11 @@ function renderTimesheet(){
       <td class="n ${r.four_off?'':'muted'}">${r.four_off}</td>
       <td class="n">${r.valid_laps}/${r.laps}<div class="sub">${r.runs} run${r.runs===1?'':'s'}${r.laps_all!=null?` · ${r.laps_all} driven`:''}</div></td>
       <td class="n">${r.vmax??'–'}</td>
-      <td class="now"><div class="live-line">${status(r)}</div><div class="sub num">${esc(String(r.tyre_now||'').split(' (')[0])} · ${esc(r.mix_now||'')} · ${r.fuel_now} kg · ERS ${r.ers_now}%${r.deploying?' · deploying':''}</div></td></tr>`;}).join('')
+      <td class="now"><div class="live-line">${status(r)}</div><div class="sub num">${esc(String(r.tyre_now||'').split(' (')[0])} · ${esc(r.mix_now||'')} · ${r.fuel_now} kg · ERS ${r.ers_now}%${r.deploying?' · deploying':''}</div></td></tr>`).join('')
       ||'<tr><td colspan="17" class="muted">No human drivers on track yet.</td></tr>'}</tbody></table>`;
 }
 
 const FILTERS=[['drivers','Drivers'],['major','Major'],['limits','Track limits'],['race','Race control'],['pit','Pit'],['all','Everything']];
-const incChip=id=>`<span class="incchip" title="Incident ${esc(id)}">${HAMMER()?'Incident '+esc(id):'Investigation after the race'}</span>`;
-// only contact between human drivers (and a manual flag) goes to the stewards; solo moments and AI clashes don't
-const forStewards=e=>e.incident&&(e.humans.length>=2||e.kind==='manual');
 function renderFeed(){
   $('feedFilters').innerHTML=FILTERS.map(([k,l])=>`<button class="btn small" type="button" data-filter="${k}" aria-pressed="${feedFilter===k}">${l}</button>`).join('');
   const ev=(S.events||[]).filter(e=>{
@@ -807,33 +657,112 @@ function renderFeed(){
     if(feedFilter==='limits')return e.kind==='track_limits'||e.kind==='lap_invalid';
     if(feedFilter==='race')return e.kind==='race_control'||e.kind==='fastest_lap';
     if(feedFilter==='pit')return e.kind==='pit';
-    return e.severity!=='ai'&&e.kind!=='track_limits'&&(e.humans.length||e.kind==='race_control'||e.kind==='manual');
+    return e.severity!=='ai'&&e.kind!=='track_limits'&&(e.humans.length||e.kind==='race_control');
   }).sort((x,y)=>y.st-x.st||y.id-x.id);
-  const sig=feedFilter+HAMMER()+ev.length+(ev[0]?ev[0].id+(ev[0].incident||''):'');
+  const sig=feedFilter+ev.length+(ev[0]?ev[0].id+(ev[0].incident||''):'')+(S.incidents||[]).map(i=>i.status).join();
   if(sig===lastFeed)return;lastFeed=sig;
   $('feed').innerHTML=ev.slice(0,200).map(e=>`<div class="msg ${e.severity}"><span class="s"></span>
     <div class="k num"><b>${esc(e.clock||'')}</b>Lap ${e.lap??''}${e.corner?' · '+esc(e.corner):''}</div>
-    <div>${e.names.length?`<div class="w">${esc(e.names.join(' / '))}</div>`:''}<div class="x">${esc(e.text)}${forStewards(e)?incChip(e.incident):''}</div></div></div>`).join('')
+    <div>${e.names.length?`<div class="w">${esc(e.names.join(' / '))}</div>`:''}<div class="x">${esc(e.text)}${e.incident?`<button class="incbtn" type="button" data-inc="${esc(e.incident)}">Incident ${esc(e.incident)}</button>`:''}</div></div></div>`).join('')
     ||'<div class="muted" style="padding:14px">Nothing yet.</div>';
 }
 
-/* ================= setups ================= */
-// Rows are setup settings, columns are drivers (from /api/detail or a session summary's detail).
-function renderSetups(src,host){
-  const el=$(host);if(!el)return;
-  const ds=(src&&src.drivers)||[];
-  if(!ds.length){el.innerHTML='<p class="muted" style="padding:14px 16px;margin:0">Setups appear once the drivers are on track.</p>';return;}
-  const groups=[];const seen={};
-  ds.forEach(d=>(d.setup||[]).forEach(g=>{if(!seen[g.title]){seen[g.title]={title:g.title,labels:[]};groups.push(seen[g.title]);}
-    g.rows.forEach(r=>{if(!seen[g.title].labels.includes(r.label))seen[g.title].labels.push(r.label);});}));
-  const val=(d,g,l)=>{const grp=(d.setup||[]).find(x=>x.title===g);const r=grp&&grp.rows.find(x=>x.label===l);return r?`${r.value}${r.unit}`:null;};
-  const known=['Traction control','ABS','Brake bias'];
-  const rows=groups.map(g=>`<tr class="grp"><th colspan="${ds.length+1}">${esc(g.title)}</th></tr>`+g.labels.map(l=>{
-      const vs=ds.map(d=>val(d,g.title,l));
-      return `<tr><td>${esc(l)}</td>${vs.map(v=>`<td class="n">${v==null?'<span class="muted">–</span>':esc(v)}</td>`).join('')}</tr>`;}).join('')).join('')
-    +`<tr class="grp"><th colspan="${ds.length+1}">Assists, from telemetry</th></tr>`+known.map(k=>`<tr><td>${esc(k)}</td>${ds.map(d=>`<td class="n">${esc((d.known||{})[k]??'–')}</td>`).join('')}</tr>`).join('');
-  el.innerHTML=`<table class="setups"><thead><tr><th></th>${ds.map(d=>`<th class="n"><span class="teambar" style="--tc:${d.color}"></span>${esc(d.name)}${d.setup?'':'<div class="sub" style="font-weight:400">not streaming</div>'}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
+function renderIncidents(){
+  const inc=(S.incidents||[]).slice().reverse();
+  const nameOf=i=>{const c=(S.cars||[]).find(x=>x.idx===i);return c?c.name:'#'+i;};
+  $('incidents').innerHTML=inc.map(i=>`<div class="inc"><span class="id num">${esc(i.id)}</span>
+    <div><div class="tt">${esc(i.title)}</div><div class="sub">Lap ${i.lap??'–'} · ${esc(i.clock||'')} · ${esc((i.cars||[]).map(nameOf).join(', '))}</div></div>
+    ${i.status==='saved'?`<button class="btn small" type="button" data-inc="${esc(i.id)}">Prompt</button>`:`<span class="tag amber">${esc(i.status)}</span>`}</div>`).join('')
+    ||'<div class="muted" style="padding:14px">Collisions, spins, heavy damage, penalties and retirements involving a human driver are saved here automatically, with 20 s of data before and 10 s after.</div>';
 }
+
+/* ================= driver detail ================= */
+const METRICS=[['min_v','Apex speed','km/h',1],['brake_at','Braking point','m',0],['entry_v','Entry speed','km/h',1],['throttle_at','Throttle on','m',0],['exit_v','Exit speed','km/h',1]];
+const LIVE_T={tabs:'tabs',detail:'detail',laps:'laps',seg:'metricSeg',note:'lblNote',data:()=>D};
+const PAST_T={tabs:'pTabs',detail:'pDetail',laps:'pLaps',seg:'pMetricSeg',note:'pLblNote',data:()=>PD};
+let PD=null;
+function renderAll(){renderDetail(LIVE_T);if(PD&&$('pTabs'))renderDetail(PAST_T);}
+function renderDetail(T){
+  T=T||LIVE_T;const D=T.data();
+  if(!D||!D.drivers||!$(T.tabs))return;
+  const ds=D.drivers;
+  if(!ds.length){$(T.tabs).innerHTML='';$(T.detail).innerHTML='<p class="muted">Driver profiles appear after the first lap.</p>';$(T.laps).innerHTML='';$(T.seg).innerHTML='';return;}
+  if(!ds.some(d=>d.idx===sel))sel=ds[0].idx;
+  $(T.tabs).innerHTML=ds.map(d=>`<button class="tab" role="tab" type="button" style="--tc:${d.color}" aria-selected="${d.idx===sel}" data-sel="${d.idx}">${esc(d.name)}</button>`).join('');
+  const d=ds.find(x=>x.idx===sel);
+  const bestApex={};ds.forEach(x=>(x.profile||[]).forEach(r=>{if(r.min_v!=null&&(bestApex[r.corner]==null||r.min_v>bestApex[r.corner]))bestApex[r.corner]=r.min_v;}));
+  const known=Object.entries(d.known||{}).filter(([k,v])=>v!=null);
+  const setup=d.setup?d.setup.filter(g=>g.rows.length).map(g=>`<div class="sgroup"><h4>${esc(g.title)}</h4><dl class="kv">${g.rows.map(r=>`<dt>${esc(r.label)}</dt><dd class="num">${esc(r.value)}${esc(r.unit)}</dd>`).join('')}</dl></div>`).join('')
+    :`<div class="note">${d.own?'No setup received from this driver\'s game yet. The game sends it every few seconds while driving; recordings made with the old capture script don\'t include it.':'This driver isn\'t streaming telemetry, and the game only shares a car\'s setup with its own driver. Below is what the other games reveal.'}</div>`;
+  const maxV=Math.max(...(d.profile||[]).map(r=>r.min_v||0),1);
+  const tlw=d.track_limits_where||{};
+  const prof=(d.profile||[]).map(r=>`<tr><td style="font-weight:700">${esc(r.corner)}</td>
+    <td class="n ${bestApex[r.corner]===r.min_v?'t-purple':''}">${r.min_v??'–'}<span class="vbar" style="width:${Math.round(60*(r.min_v||0)/maxV)}px"></span></td>
+    <td class="n">${r.best_min_v??'–'}</td><td class="n">${r.entry_v??'–'}</td>
+    <td class="n">${r.brake_at!=null?Math.round(r.brake_at)+' m':'<span class="muted">flat out</span>'}</td>
+    <td class="n muted">${r.brake_range?r.brake_range[0]+'–'+r.brake_range[1]:''}</td>
+    <td class="n">${r.gear??'–'}</td><td class="n">${r.throttle_at!=null?Math.round(r.throttle_at)+' m':'–'}</td><td class="n">${r.exit_v??'–'}</td>
+    <td class="n ${tlw[r.corner]?'t-yellow':'muted'}">${tlw[r.corner]||0}</td><td class="n ${(d.cuts_where||{})[r.corner]?'t-yellow':'muted'}">${(d.cuts_where||{})[r.corner]||0}</td></tr>`).join('');
+  const basis=(d.profile&&d.profile[0])?d.profile[0].basis:'';
+  $(T.detail).innerHTML=`<div class="panel"><div class="phead"><span class="teambar" style="--tc:${d.color}"></span><h3>Setup</h3><span class="sub">${esc(d.team)}</span></div>
+      ${setup}<div class="sgroup"><h4>From telemetry</h4><dl class="kv">${known.map(([k,v])=>`<dt>${esc(k)}</dt><dd class="num">${esc(v)}</dd>`).join('')}</dl></div></div>
+    <div class="panel"><div class="phead"><h3>Corners</h3><span class="sub">${D.zones_auto?'Corners detected automatically from the fastest lap · ':''}${basis?'Averages over '+esc(basis):''}</span></div>
+      <div class="scroll"><table><thead><tr><th>Corner</th><th class="n">Avg apex km/h</th><th class="n">Best</th><th class="n">Entry km/h</th><th class="n">Brakes at</th><th class="n">Range</th><th class="n">Gear</th><th class="n">Throttle on</th><th class="n">Exit km/h</th><th class="n">4 wheels off</th><th class="n">Cuts</th></tr></thead>
+      <tbody>${prof||'<tr><td colspan="11" class="muted">Needs at least one completed lap.</td></tr>'}</tbody></table></div>
+      <div class="legend"><span><b class="t-purple">Purple</b> highest average apex speed among the human drivers</span><span>Braking point and throttle-on are distances from the start line</span></div></div>`;
+  renderLaps(d,T,D);
+}
+
+function renderLaps(d,T,D){
+  $(T.seg).innerHTML=METRICS.map(([k,l])=>`<button type="button" data-metric="${k}" aria-pressed="${metric===k}">${l}</button>`).join('');
+  const m=METRICS.find(x=>x[0]===metric)||METRICS[0];
+  const zones=D.zones||[];const laps=d.laps||[];
+  // laps that count for bests: timed by the game, and not a race's standing-start lap
+  const counts=l=>l.timed!==false&&(l.standing!=null?!l.standing:(D.kind!=='race'||l.lap>1));
+  const overall=Math.min(...D.drivers.flatMap(x=>x.laps.filter(l=>counts(l)&&l.time>0).map(l=>l.time)),1e9);
+  const pb=Math.min(...laps.filter(l=>counts(l)&&l.time>0).map(l=>l.time),1e9);
+  const secBest=k=>Math.min(...laps.filter(l=>counts(l)&&l[k]>0).map(l=>l[k]),1e9);
+  const sb={s1:secBest('s1'),s2:secBest('s2'),s3:secBest('s3')};
+  const avg={};(d.profile||[]).forEach(r=>avg[r.corner]=r[m[0]]);
+  $(T.note).textContent=`Every lap ${d.name} drove. Out laps and in-laps aren't timed by the game; their times (marked ~) are measured here. Corner columns show ${m[1].toLowerCase()} (${m[2]}); the small number is the difference from their clean-lap average.`;
+  const cell=(l,z)=>{const c=(l.corners||{})[z.name];if(!c)return '<td class="n muted">–</td>';const v=c[m[0]];
+    if(v==null)return `<td class="n muted">${m[0]==='brake_at'?'flat':'–'}</td>`;
+    const a=avg[z.name];let cls='',dv='';
+    if(a!=null){const diff=v-a;dv=`<span class="dev">${diff>=0?'+':''}${Math.round(diff)}</span>`;
+      if(m[3]){if(diff>=3)cls='t-green';else if(diff<=-4)cls='t-red';}}
+    return `<td class="n ${cls}">${Math.round(v)}${dv}</td>`;};
+  const rows=laps.map(l=>{
+    const tcls=!counts(l)?'muted':l.time===overall?'t-purple':l.time===pb?'t-green':'';
+    const flags=[l.kind==='out'?'<span class="tag">Out lap</span>':'',l.kind==='in'?'<span class="tag">In lap</span>':'',l.pit&&l.kind==='flying'?'<span class="tag blue">Pit</span>':'',l.sc?'<span class="tag amber">SC</span>':'',l.incident?'<span class="tag red">Incident</span>':'',!l.valid?'<span class="tag">Invalid</span>':''].filter(Boolean).join(' ');
+    const sec=k=>`<td class="n ${l[k]===sb[k]&&counts(l)?'t-green':''}">${l[k]?l[k].toFixed(3):'–'}</td>`;
+    return `<tr class="${l.pit?'pit':''}"><td class="n" style="font-weight:700">${l.lap}</td><td class="n ${tcls} ${l.valid?'':'inv'}" style="font-weight:700" ${l.timed===false?'title="Not timed by the game"':''}>${l.timed===false?'~':''}${ft(l.time)}</td>${sec('s1')}${sec('s2')}${sec('s3')}
+      <td class="n">P${l.position??'–'}</td><td>${tyre(l.tyre,true)} <span class="muted num">${l.tyre_age??''}</span></td>
+      <td class="n">${l.wear_avg??'–'}%</td><td class="n">${l.fuel_start!=null?l.fuel_start.toFixed(1):'–'}<span class="dev">${l.fuel_used!=null?'−'+l.fuel_used.toFixed(2):''}</span></td><td>${esc(l.mix||'–')}</td>
+      <td class="n" title="Deployed most at: ${esc((l.deploy_where||[]).join(', '))}">${l.ers_deployed_mj??'–'}<span class="dev">${l.deploy_pct!=null?l.deploy_pct+'% of lap':''}</span></td>
+      <td class="n ${l.track_limits?'t-yellow':'muted'}">${l.track_limits||0}</td><td class="n ${l.cuts?'t-yellow':'muted'}" title="${esc((l.cuts_where||[]).join(', '))}">${l.cuts||0}</td>
+      <td class="n ${l.traffic_pct>=10?'t-yellow':''}">${l.traffic_pct!=null?l.traffic_pct+'%':'–'}</td><td class="n">${l.avg_speed??'–'}</td><td class="n">${l.vmax??'–'}</td>
+      ${zones.map(z=>cell(l,z)).join('')}<td>${flags}</td></tr>`;}).join('');
+  $(T.laps).innerHTML=`<table><thead><tr><th class="n">Lap</th><th class="n">Time</th><th class="n">S1</th><th class="n">S2</th><th class="n">S3</th><th class="n">Pos</th><th>Tyre</th><th class="n">Avg wear</th><th class="n">Fuel kg <small class="muted">start / used</small></th><th>Mix</th><th class="n">ERS MJ</th><th class="n">4 off</th><th class="n">Cuts</th><th class="n">Traffic</th><th class="n">Avg km/h</th><th class="n">Top km/h</th>
+    ${zones.map(z=>`<th class="corner-h">${esc(z.name)}<small>${m[2]}</small></th>`).join('')}<th></th></tr></thead><tbody>${rows||`<tr><td colspan="${17+zones.length}" class="muted">No completed laps yet.</td></tr>`}</tbody></table>
+    <div class="legend"><span><b class="t-purple">Purple</b> fastest lap of the session</span><span><b class="t-green">Green</b> personal best lap or sector; for speeds, 3+ km/h above their average</span><span><b class="t-red">Red</b> 4+ km/h below their average</span><span>ERS: MJ deployed (limit 4) and share of the lap spent deploying; hover for where</span><span>Cuts: over the inside of a corner; hover for which corner. Traffic: share of the lap within 1 s behind another car</span></div>`;
+}
+
+/* ================= incidents dialog ================= */
+async function openIncident(id,sessionId){
+  const sid=sessionId||(S&&S.session&&S.session.id);
+  const inc=(S&&S.incidents||[]).find(i=>i.id===id);
+  let folder=inc&&inc.path&&!sessionId?inc.path.replace(/\\/g,'/').split('/').pop():null;
+  if(!folder){const r=await fetch(`/api/sessions/${encodeURIComponent(sid)}/incidents`).then(r=>r.json()).catch(()=>({incidents:[]}));const m=(r.incidents||[]).find(x=>x.id===id||x.folder===id);folder=m&&m.folder;}
+  if(!folder){toast('Still recording this incident. Try again in a few seconds.');return;}
+  const txt=await fetch(`/api/sessions/${encodeURIComponent(sid)}/incidents/${encodeURIComponent(folder)}/prompt.md`).then(r=>r.ok?r.text():null).catch(()=>null);
+  if(!txt){toast('Prompt not written yet.');return;}
+  $('dlgTitle').textContent=`Incident ${id}`;$('dlgBody').textContent=txt;
+  $('dlgData').href=`/api/sessions/${encodeURIComponent(sid)}/incidents/${encodeURIComponent(folder)}/incident.json`;
+  $('dlg').showModal();
+}
+$('dlgClose').onclick=()=>$('dlg').close();
+$('dlgCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('dlgBody').textContent);toast('Prompt copied. Paste it into Claude for a stewards’ ruling.');}
+  catch(e){const r=document.createRange();r.selectNodeContents($('dlgBody'));const g=getSelection();g.removeAllRanges();g.addRange(r);toast('Press Ctrl+C to copy');}};
 
 /* ================= sessions ================= */
 async function loadSessions(){
@@ -851,24 +780,26 @@ async function loadSessions(){
 async function openSummary(id){
   showView('sessions');
   const sm=await fetch(`/api/sessions/${encodeURIComponent(id)}/summary`).then(r=>r.ok?r.json():null).catch(()=>null);
+  const inc=await fetch(`/api/sessions/${encodeURIComponent(id)}/incidents`).then(r=>r.json()).catch(()=>({incidents:[]}));
   if(!sm){$('sessDetail').innerHTML='<p class="muted">No summary for this session yet.</p>';return;}
   const se=sm.session;
   const cls=sm.classification.map(r=>`<tr><td class="n" style="font-weight:700;font-size:16px">${r.pos}</td><td style="${r.human?'font-weight:700':''}">${esc(r.name)}</td><td class="muted">${esc(r.team)}</td><td class="n">${r.grid}</td><td class="n">${r.laps}</td>
     <td class="n">${r.pos===1&&r.race_time?ft(r.race_time):r.gap!=null?'+'+r.gap.toFixed(3):r.laps_down?'+'+r.laps_down+' lap':esc(r.status)}</td><td class="n">${r.penalties_s?r.penalties_s+'s':''}</td><td class="n">${ft(r.best_lap)}</td><td class="n">${r.pit_stops}</td></tr>`).join('');
   const drv=sm.drivers.map(d=>`<div class="panel"><div class="phead"><h3>${esc(d.name)}</h3><span class="sub">${esc(d.team)} · P${d.grid} → P${d.finish} · best ${ft(d.best_lap)} · ${d.track_limits||0}× four wheels off · penalties ${d.penalties_s}s</span></div>
-      ${d.mistakes.length?`<div class="scroll"><table><thead><tr><th>Clock</th><th class="n">Lap</th><th>What happened</th></tr></thead><tbody>${d.mistakes.filter(m=>m.kind!=='track_limits').map(m=>`<tr><td class="num">${esc(m.clock||'')}</td><td class="n">${m.lap}</td><td style="white-space:normal"><span class="${m.severity==='major'?'t-red':'t-yellow'}">■</span> ${esc(m.text)}${m.incident?`<span class="incchip">Incident ${esc(m.incident)}</span>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="padding:0 14px">Clean race.</p>'}</div>`).join('');
-  const incs=(sm.incidents||[]).map(i=>`<div class="inc"><span class="id num">${esc(i.id)}</span><div><div class="tt">${esc(i.title)}</div><div class="sub">Lap ${i.lap??'–'}${i.clock?' · '+esc(i.clock):''}</div></div></div>`).join('');
+      ${d.mistakes.length?`<div class="scroll"><table><thead><tr><th>Clock</th><th class="n">Lap</th><th>What happened</th></tr></thead><tbody>${d.mistakes.filter(m=>m.kind!=='track_limits').map(m=>`<tr><td class="num">${esc(m.clock||'')}</td><td class="n">${m.lap}</td><td style="white-space:normal"><span class="${m.severity==='major'?'t-red':'t-yellow'}">■</span> ${esc(m.text)}${m.incident?`<button class="incbtn" type="button" data-inc="${esc(m.incident)}" data-sess="${esc(id)}">Incident ${esc(m.incident)}</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="padding:0 14px">Clean race.</p>'}</div>`).join('');
+  const incs=(inc.incidents||[]).map(i=>`<div class="inc"><span class="id num">${esc(i.id)}</span><div><div class="tt">${esc(i.title)}</div><div class="sub">Lap ${i.lap??'–'} · ${esc(i.clock||'')} · ${esc((i.drivers||[]).join(', '))}</div></div><button class="btn small" type="button" data-inc="${esc(i.id)}" data-sess="${esc(id)}">Prompt</button></div>`).join('');
   $('sessDetail').innerHTML=`<div class="shead"><h2>${esc(se.track)} · ${esc(se.type)}</h2><a class="btn small" href="/api/sessions/${encodeURIComponent(id)}/summary.md" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">summary.md</a></div>
     <div class="panel scroll"><table><thead><tr><th class="n">Pos</th><th>Driver</th><th>Team</th><th class="n">Grid</th><th class="n">Laps</th><th class="n">Time / gap</th><th class="n">Pen</th><th class="n">Best</th><th class="n">Stops</th></tr></thead><tbody>${cls}</tbody></table></div>
-    ${incs?`<div class="panel"><div class="phead"><h3>Incidents</h3></div>${incs}</div>`:''}
-    ${sm.detail?'<div class="shead"><h2>Setups</h2></div><div class="panel scroll" id="pSetups"></div>':''}
+    ${incs?`<div class="panel"><div class="phead"><h3>Incidents</h3><span class="saved">Saved for analysis</span></div>${incs}</div>`:''}
+    ${sm.detail?`<div class="shead"><h2>Driver profile</h2><p>Recorded session.</p></div><div class="tabs" id="pTabs" role="tablist"></div><div class="detail" id="pDetail"></div>
+      <div class="shead"><h2>Lap by lap</h2><p id="pLblNote"></p><div class="seg" id="pMetricSeg" role="group" aria-label="Corner metric"></div></div><div class="panel scroll" id="pLaps"></div>`:''}
     <div class="shead"><h2>Mistakes</h2></div>${drv}`;
-  if(sm.detail)renderSetups(sm.detail,'pSetups');
+  PD=sm.detail||null;if(PD)renderDetail(PAST_T);
   $('sessDetail').scrollIntoView({behavior:'smooth',block:'start'});
 }
 function showView(v){
   view=v;
-  if(v!=='engineer')document.body.classList.remove('eng-dark','eng-fit');
+  if(v!=='engineer')document.body.classList.remove('pw-compact','pw-fit');
   for(const[k,id]of[['live','liveView'],['engineer','engineerView'],['sessions','sessionsView']])$(id).classList.toggle('hidden',v!==k);
   document.querySelectorAll('#views [data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===v)));
   if(v==='sessions')loadSessions();
@@ -878,39 +809,31 @@ function setHash(){try{history.replaceState(null,'',view==='live'?location.pathn
 function fromHash(){const h=location.hash;if(h==='#sessions')return['sessions'];if(h.startsWith('#engineer'))return['engineer',decodeURIComponent(h.slice(10))||null];return['live'];}
 
 /* ================= race engineer ================= */
-// One driver's engineer page: the original app's RaceEngineer, panel for panel. The stream carries that
-// driver's analysis with this viewer's handling feedback applied; the feedback stays on this device, per
-// driver and track.
-let view='live',engName=null,engFb=[],fbFor=null,engState=null,speaking=false,engTab='recommendations',copiedUntil=0,engPane='engineer';
-try{engName=localStorage.getItem('pw.engineer')||null;engPane=localStorage.getItem('pw.engPane')==='telemetry'?'telemetry':'engineer';}catch(e){}
+// One driver's engineer page. The stream carries that driver's analysis with this viewer's handling
+// feedback applied; the feedback is kept on this device, per driver and track.
+let view='live',engName=null,engFb=[],fbFor=null,engState=null,speaking=false,engLayout='compact';
+try{engName=localStorage.getItem('pw.engineer')||null;engLayout=localStorage.getItem('pw.engLayout')==='detailed'?'detailed':'compact';}catch(e){}
 const engCache={};
 function put(id,html){const el=$(id);if(!el||engCache[id]===html)return;engCache[id]=html;el.innerHTML=html;}
 function fbKey(){return `pw.fb.${(engName||'').toLowerCase()}.${S&&S.session?S.session.track_id:''}`;}
 function pickDriver(name){engName=name;try{localStorage.setItem('pw.engineer',name);}catch(e){}fbFor=null;engFb=[];setHash();connect();render();}
 function setFb(list){engFb=list;try{localStorage.setItem(fbKey(),JSON.stringify(list));}catch(e){}connect();renderEngineer();}
-const SVG=p=>`<svg viewBox="0 0 24 24" aria-hidden="true">${p}</svg>`;
-const ICON={
-  radio:SVG('<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>'),
-  vol:SVG('<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>'),
-  timer:SVG('<line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/>'),
-  tyre:SVG('<circle cx="12" cy="12" r="9" stroke-dasharray="3.2 2.6"/><circle cx="12" cy="12" r="1.2"/>'),
-  fuel:SVG('<line x1="3" x2="15" y1="22" y2="22"/><line x1="4" x2="14" y1="9" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/>'),
-  shield:SVG('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="M12 8v4"/><path d="M12 16h.01"/>'),
-  sliders:SVG('<line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/>'),
-  ok:SVG('<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>'),
-  arrow:SVG('<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>'),
-  copy:SVG('<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>'),
-  check:SVG('<path d="M20 6 9 17l-5-5"/>'),
-};
-const RE_READY=`<div class="re"><div class="re-grid">
-  <div class="re-col"><section class="re-brief" id="reBrief" aria-labelledby="reHead"></section><div class="re-card" id="reBal"></div><div id="reFb"></div></div>
-  <div class="re-col re-right"><div class="re-tabs" id="reTabs"></div><div class="re-body" id="reBody"></div></div></div></div>`;
-const SHEET=[['1. Aerodynamics','1 - 11',[['frontWing','Front Wing Aero',''],['rearWing','Rear Wing Aero','']]],
-  ['2. Transmission','50% - 100%',[['onThrottleDiff','Diff On-Throttle','%'],['offThrottleDiff','Diff Off-Throttle','%']]],
-  ['3. Suspension Geometry','',[['frontCamber','Front Camber','°'],['rearCamber','Rear Camber','°'],['frontToe','Front Toe-out','°'],['rearToe','Rear Toe-in','°']]],
-  ['4. Suspension','',[['frontSuspension','Front Suspension',''],['rearSuspension','Rear Suspension',''],['frontAntiRollBar','Front Anti-Roll Bar',''],['rearAntiRollBar','Rear Anti-Roll Bar',''],['frontRideHeight','Front Ride Height',''],['rearRideHeight','Rear Ride Height','']]],
-  ['5. Brakes','',[['brakePressure','Brake Pressure','%'],['brakeBias','Front Brake Bias','%']]],
-  ['6. Tyre Pressures','',[['frontLeftTyrePressure','Front Tyres (FL / FR)',' PSI'],['rearLeftTyrePressure','Rear Tyres (RL / RR)',' PSI']]]];
+const fmtv=v=>v==null?'–':String(v);
+const unitS=u=>u==='clicks'?'':u==='deg'?'°':u==='PSI'?' psi':u;
+const SHEET=[['Aerodynamics',[['frontWing','Front wing',''],['rearWing','Rear wing','']]],
+  ['Transmission',[['onThrottleDiff','Diff on throttle','%'],['offThrottleDiff','Diff off throttle','%']]],
+  ['Suspension geometry',[['frontCamber','Front camber','°'],['rearCamber','Rear camber','°'],['frontToe','Front toe','°'],['rearToe','Rear toe','°']]],
+  ['Suspension',[['frontSuspension','Front suspension',''],['rearSuspension','Rear suspension',''],['frontAntiRollBar','Front anti-roll bar',''],['rearAntiRollBar','Rear anti-roll bar',''],['frontRideHeight','Front ride height',''],['rearRideHeight','Rear ride height','']]],
+  ['Brakes',[['brakePressure','Brake pressure','%'],['brakeBias','Brake bias','%']]],
+  ['Tyre pressures',[['frontLeftTyrePressure','Front left',' psi'],['frontRightTyrePressure','Front right',' psi'],['rearLeftTyrePressure','Rear left',' psi'],['rearRightTyrePressure','Rear right',' psi']]]];
+const ENG_READY=`<div class="eng"><div class="eng-col"><div class="panel brief" id="eBrief"></div><div class="panel" id="eBal"></div><div class="panel" id="eFb"></div><div class="panel" id="eRecs"></div></div>
+  <div class="eng-col"><div class="panel" id="eTyres"></div><div class="panel" id="eSheet"></div><div class="panel" id="eDiag"></div></div></div>`;
+const ENG_COMPACT=`<div class="pwc"><div class="pit-wall-grid">
+  <section class="pit-panel pit-wall-timing" aria-label="Live timing" id="pwTiming"></section>
+  <section class="pit-panel pit-wall-strategy" aria-label="Engineer strategy" id="pwStrategy"></section>
+  <section class="pit-panel pit-wall-car" aria-label="Live car telemetry" id="pwCar"></section>
+  <section class="pit-panel pit-wall-tyres" aria-label="Tyres and brakes" id="pwTyres"></section>
+  <section class="pit-panel pit-wall-laps" aria-label="Recent laps" id="pwLaps"></section></div></div>`;
 
 function renderEngineer(){
   const roster=(S&&S.roster)||[],E=S&&S.engineer,me=(engName||'').toLowerCase();
@@ -920,10 +843,10 @@ function renderEngineer(){
     if(saved.join()!==engFb.join()){engFb=saved;connect();}
   }
   const state=!S||!S.session?'nosession':!engName?'pick':!E||E.driver.toLowerCase()!==me?'loading':!E.found?'absent':!E.own?'notown':!E.car||!E.car.setup?'nosetup':E.analysis?'ready':'error';
-  document.body.classList.toggle('eng-dark',view==='engineer');document.body.classList.toggle('eng-fit',view==='engineer'&&state==='ready');
-  document.querySelectorAll('#engPane [data-engpane]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.engpane===engPane)));
-  const key=state==='ready'?state+'.'+engPane:state;
-  if(key!==engState){engState=key;for(const k in engCache)if(k!=='engTabs')delete engCache[k];$('engBody').innerHTML=state==='ready'?(engPane==='telemetry'?TEL_READY:RE_READY):'<div class="msgbox" id="engMsg"></div>';}
+  const compact=engLayout==='compact',key=state==='ready'?state+'.'+engLayout:state;
+  document.body.classList.toggle('pw-compact',compact);document.body.classList.toggle('pw-fit',compact&&state==='ready');
+  document.querySelectorAll('#engLayout [data-englayout]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.englayout===engLayout)));
+  if(key!==engState){engState=key;for(const k in engCache)if(k!=='engTabs')delete engCache[k];$('engBody').innerHTML=state==='ready'?(compact?ENG_COMPACT:ENG_READY):'<div class="msgbox" id="engMsg"></div>';}
   const host=location.hostname,port=(S&&S.app&&S.app.udp_port)||20777,who=esc(engName||'');
   const msg={
     nosession:`<h3>Waiting for telemetry</h3><p>The engineer starts once a session is running and your game is sending telemetry to ${esc(host)}, port ${port}.</p>`,
@@ -935,41 +858,44 @@ function renderEngineer(){
     error:`<h3>No analysis</h3><p>${esc(E&&E.error||'')}</p>`,
   };
   if(state!=='ready'){put('engMsg',msg[state]);return;}
-  const A=E.analysis,b=A.briefing,chk=FUN().checking,checking=!!(chk&&chk.idx===E.idx);
-  if(engPane==='telemetry'){renderTelemetry(E,checking);return;}
-  put('reBrief',`<div class="re-bh"><div class="re-live"><span class="re-ping"><i></i><b></b></span><span class="re-lbl">${ICON.radio} Live engineer</span><span class="re-pill">${esc(b.sessionLabel)}</span></div>
-      <button type="button" class="re-speak${speaking?' on':''}" data-act="radio" aria-pressed="${speaking}">${ICON.vol}${speaking?'Mute Radio':'Play Voice Radio'}</button></div>
-    <div class="re-bb"><p class="re-eyebrow">Engineer priority</p><h3 id="reHead" class="re-head${checking?' checking-msg':''}">${checking?'We are checking…':esc(b.headline)}</h3><p class="re-rat">${checking?'':esc(b.rationale)}</p></div>
-    <dl class="re-calls"><div><dt>${ICON.timer.replace('<svg','<svg style="color:#22d3ee"')} ${esc(b.pitLabel)}</dt><dd>${esc(b.pitCall)}</dd></div>
-      <div><dt>${ICON.tyre.replace('<svg','<svg style="color:#fbbf24"')} Tyre call</dt><dd>${esc(b.tyreCall)}</dd></div>
-      <div><dt>${ICON.fuel.replace('<svg','<svg style="color:#34d399"')} Fuel mix</dt><dd>${esc(b.fuelCall)}</dd></div></dl>
-    <p class="sr-only" aria-live="polite">${esc(A.radioMessage)}</p>`);
+  if(compact){renderCompact(E);return;}
+  const A=E.analysis,b=A.briefing,C=E.car,T=C.telemetry;
+  put('eBrief',`<div class="phead"><span class="teambar" style="--tc:${E.color}"></span><h3>${esc(E.name)}</h3><span class="sub">${esc(E.team)} · ${esc(b.sessionLabel)}</span><span class="spacer"></span>
+      <button class="btn small" type="button" data-act="radio" aria-pressed="${speaking}">${speaking?'Stop radio':'Play radio'}</button></div>
+    <div class="body"><div class="eyebrow">Engineer priority</div><div class="headline">${esc(b.headline)}</div><p>${esc(b.rationale)}</p></div>
+    <dl class="calls"><div><dt>${esc(b.pitLabel)}</dt><dd>${esc(b.pitCall)}</dd></div><div><dt>Tyre call</dt><dd>${esc(b.tyreCall)}</dd></div><div><dt>Fuel mix</dt><dd>${esc(b.fuelCall)}</dd></div></dl>`);
   const sc=A.balanceScore,bc=sc<-2?'os':sc>2?'us':'ok';
-  put('reBal',`<div class="re-balh"><span>CHASSIS BALANCE TELEMETRY:</span><span class="re-badge ${bc}">${esc(A.balanceLabel)} (Score: ${sc>0?'+'+sc:sc})</span></div>
-    <div><div class="re-scale"><span style="color:#f87171">OVERSTEER (-10)</span><span style="color:#34d399">BALANCED (0)</span><span style="color:#fbbf24">UNDERSTEER (+10)</span></div>
-      <div class="re-track" role="img" aria-label="Balance ${sc}, from −10 oversteer to +10 understeer"><i class="mid"></i><i class="fill" style="background:${sc<0?'#ef4444':'#f59e0b'};left:${sc<0?50+sc*5:50}%;width:${Math.abs(sc)*5}%"></i></div></div>
-    ${A.diagnosedIssues.length?`<div class="re-issues">${A.diagnosedIssues.map(i=>`<div class="re-issue">${ICON.shield.replace('<svg',`<svg style="color:${i.severity==='danger'?'#f87171':i.severity==='warning'?'#fbbf24':'#22d3ee'}"`)}<div><b>${esc(i.title)}</b><span>${esc(i.description)}</span></div></div>`).join('')}</div>`:''}`);
-  put('reFb',`<div class="re-fbh"><h4>${ICON.sliders} Driver Handling Feedback</h4><span>Select what you feel to fine-tune setup clicks</span></div>
-    <div class="re-fbgrid">${E.options.map(o=>`<button type="button" class="re-fb" data-fb="${esc(o.id)}" aria-pressed="${engFb.includes(o.id)}" title="${esc(o.description)}"><b>${esc(o.label)}</b><span>${esc(o.description)}</span></button>`).join('')}</div>`);
-  const recs=A.recommendations,copied=Date.now()<copiedUntil;
-  put('reTabs',`<div role="tablist"><button type="button" role="tab" class="re-tab" data-retab="recommendations" aria-selected="${engTab==='recommendations'}">Recommended Setup Adjustments (${recs.length})</button>
-      <button type="button" role="tab" class="re-tab" data-retab="full_sheet" aria-selected="${engTab==='full_sheet'}">Complete F1 2020 Garage Setup Sheet</button></div>
-    <button type="button" class="re-copy" data-act="copySetup">${copied?ICON.check.replace('<svg','<svg class="ok"'):ICON.copy}${copied?'Copied to Clipboard!':'Copy Full Setup'}</button>`);
-  const tgt=A.targetSetup;
-  put('reBody',engTab==='recommendations'?(recs.length?recs.map(r=>`<div class="re-rec"><div class="re-rech"><div><span class="re-cat">${esc(r.category)}</span><span class="re-rl">${esc(r.label)}</span></div>
-        <div class="re-vals"><span class="cur">Current: <b>${esc(r.currentValue)}</b></span>${ICON.arrow}<span class="to">Recommended: ${esc(r.recommendedValue)} ${esc(r.unit)}</span><span class="re-delta ${r.delta>0?'up':'down'}">${r.delta>0?'+'+r.delta:r.delta}</span></div></div>
-        <p class="re-why"><b>Race Engineer Rationale: </b>${esc(r.reason)}</p></div>`).join('')
-      :`<div class="re-ok">${ICON.ok}<b>Car Setup is Currently Optimal</b><p>Telemetry shows balanced tyre degradation, stable cornering Gs, and zero excessive wheel slip for ${esc(E.car.session.trackName)}.</p></div>`)
-    :`<div class="re-sheet">${SHEET.map(([t,range,rows])=>`<div class="re-grp"><h5><span>${t}</span>${range?`<span class="rng">${range}</span>`:''}</h5>${rows.map(([k,l,u])=>`<div class="re-kv"><span>${l}:</span><b>${esc(tgt[k])}${u}</b></div>`).join('')}</div>`).join('')}</div>`);
+  put('eBal',`<div class="phead"><h3>Balance</h3><span class="bal ${bc}">${esc(A.balanceLabel)} · ${sc>0?'+':''}${sc}</span></div>
+    <div class="gauge"><div class="gscale"><span>Oversteer −10</span><span>Neutral</span><span>Understeer +10</span></div>
+      <div class="gtrack" role="img" aria-label="Balance ${sc}, from −10 oversteer to +10 understeer"><i class="mid"></i>${sc?`<i class="fill ${sc<0?'os':'us'}" style="left:${sc<0?50+sc*5:50}%;width:${Math.abs(sc)*5}%"></i>`:''}</div></div>
+    ${A.diagnosedIssues.map(i=>`<div class="issue ${esc(i.severity)}"><span class="s"></span><div><b>${esc(i.title)}</b><span>${esc(i.description)}</span></div></div>`).join('')}`);
+  put('eFb',`<div class="phead"><h3>How does the car feel?</h3><span class="sub">Tick what you feel; the advice updates.</span>${engFb.length?'<span class="spacer"></span><button class="btn small" type="button" data-act="fbclear">Clear</button>':''}</div>
+    <div class="fbgrid">${E.options.map(o=>`<button class="fb" type="button" data-fb="${esc(o.id)}" aria-pressed="${engFb.includes(o.id)}" title="Likely cause: ${esc(o.symptom)}"><b>${esc(o.label)}</b><span>${esc(o.description)}</span></button>`).join('')}</div>`);
+  const recs=A.recommendations;
+  put('eRecs',`<div class="phead"><h3>Setup changes</h3><span class="sub">${recs.length?recs.length+' suggested, most important first':'none needed'}</span></div>
+    ${recs.length?recs.map(r=>`<div class="recrow"><div class="rectop"><span class="tag">${esc(r.category)}</span><span class="l">${esc(r.label)}</span><span class="tag ${r.priority==='High'?'red':r.priority==='Medium'?'amber':''}">${esc(r.priority)}</span>
+      <span class="change"><span class="muted">${fmtv(r.currentValue)}</span>→<span class="to">${fmtv(r.recommendedValue)}${esc(unitS(r.unit))}</span><span class="dchip">${r.delta>0?'+':''}${fmtv(r.delta)}</span></span></div><p>${esc(r.reason)}</p></div>`).join('')
+    :`<div class="ok-state"><b>Car setup is currently optimal</b><span class="muted">Telemetry shows balanced tyre temperatures and no excessive wheel slip for ${esc(C.session.trackName)}.</span></div>`}`);
+  const core=t=>t<88?'cold':t<=104?'ok':t<=109?'warm':'hot',brk=t=>t<250?'cold':t<650?'ok':t<850?'warm':'hot',W=C.damage.tyresWear;
+  const tc=(k,l)=>`<div class="tc ${core(T.tyresInnerTemperature[k])}"><span class="corner">${l}</span><span class="core num">${T.tyresInnerTemperature[k]}°</span>
+    <span class="sub num">surface ${T.tyresSurfaceTemperature[k]}° · ${Number(T.tyresPressure[k]).toFixed(1)} psi</span><span class="sub num">wear ${W[k]}% · brake <b class="bt ${brk(T.brakesTemperature[k])}">${T.brakesTemperature[k]}°</b></span></div>`;
+  put('eTyres',`<div class="phead"><h3>Tyres &amp; brakes</h3><span class="sub">${esc(C.status.tyreCompound)}${C.status.tyresAgeLaps!=null?' · '+C.status.tyresAgeLaps+' laps old':''} · core 95–104° is the window</span></div>
+    <div class="tyres4">${tc('fl','Front left')}${tc('fr','Front right')}${tc('rl','Rear left')}${tc('rr','Rear right')}</div>`);
+  const cur=C.setup,tgt=A.targetSetup;
+  put('eSheet',`<div class="phead"><h3>Setup sheet</h3><span class="sub">Current → engineer's</span><span class="spacer"></span><button class="btn small" type="button" data-act="copySetup">Copy setup</button></div>
+    <table class="sheet"><tbody>${SHEET.map(([g,rows])=>`<tr class="grp"><th colspan="3">${g}</th></tr>`+rows.map(([k,l,u])=>`<tr class="${cur[k]!==tgt[k]?'chg':''}"><td>${l}</td><td class="n muted">${fmtv(cur[k])}${u}</td><td class="n"><b>${fmtv(tgt[k])}${u}</b></td></tr>`).join('')).join('')}</tbody></table>`);
+  const d=C.diagnostics,it=T.tyresInnerTemperature,fa=(it.fl+it.fr)/2,ra=(it.rl+it.rr)/2;
+  const lapRows=C.recentLaps.slice().reverse().map(l=>`<tr><td class="n">${l.lapNumber}</td><td class="n ${l.isValid?'':'inv'}">${ft(l.lapTime)}</td><td class="n">${l.oversteerEvents}</td><td class="n">${l.understeerEvents}</td><td class="n">${l.kerbEvents??'–'}</td><td class="n">${Math.max(...Object.values(l.tyreWearDelta)).toFixed(1)}</td></tr>`).join('');
+  put('eDiag',`<div class="phead"><h3>What the telemetry shows</h3>${C.setupChangedLap!=null?`<span class="tag blue">New setup since lap ${C.setupChangedLap}</span>`:''}</div>
+    ${C.setupChangedLap!=null?'<div class="note">Setup changed, so the counts started again: the advice now comes only from laps on the new setup.</div>':''}
+    <div class="sgroup"><dl class="kv"><dt>Oversteer samples, this lap</dt><dd class="num">${d.oversteerEvents}</dd><dt>Understeer samples, this lap</dt><dd class="num">${d.understeerEvents}</dd>
+      <dt>Front locking samples, session</dt><dd class="num">${d.frontLockingEvents.toLocaleString()}</dd><dt>Kerb strikes, over a lap</dt><dd class="num">${d.kerbBottomingEvents}</dd>
+      <dt>Core temperature front / rear</dt><dd class="num">${Math.round(fa)}° / ${Math.round(ra)}°</dd><dt>Laps logged</dt><dd class="num">${C.laps} (${C.validLaps} valid)</dd></dl></div>
+    ${lapRows?`<div class="scroll"><table><thead><tr><th class="n">Lap</th><th class="n">Time</th><th class="n">Oversteer</th><th class="n">Understeer</th><th class="n">Kerb strikes</th><th class="n">Wear +%</th></tr></thead><tbody>${lapRows}</tbody></table></div>`:''}
+    <div class="legend">Samples are counted on every telemetry packet from your own game, as the original race engineer did. Balance uses this lap's oversteer and understeer. Kerb strikes are sharp suspension movements, counted over the current or last lap (whichever is higher); more than 3 means the car is too stiff or too low. Front locking builds up over the session.</div>`);
 }
 
-const TEL_READY=`<div class="pwc"><div class="pit-wall-grid">
-  <section class="pit-panel pit-wall-timing" aria-label="Live timing" id="pwTiming"></section>
-  <section class="pit-panel pit-wall-strategy" aria-label="Engineer strategy" id="pwStrategy"></section>
-  <section class="pit-panel pit-wall-car" aria-label="Live car telemetry" id="pwCar"></section>
-  <section class="pit-panel pit-wall-tyres" aria-label="Tyres and brakes" id="pwTyres"></section>
-  <section class="pit-panel pit-wall-laps" aria-label="Recent laps" id="pwLaps"></section></div></div>`;
-// My telemetry: the original's PitWallOverview, panel for panel, with the dial.
+// Compact layout: the original's PitWallOverview, panel for panel.
 const pwTime=s=>!s||s<0?'--:--.---':`${Math.floor(s/60)}:${(s%60).toFixed(3).padStart(6,'0')}`;
 // Dial: speed on the outer ring (0-360 km/h over 270°), throttle up the left and brake up the right
 // on the inner ring, speed / rpm / gear in the middle. Angles are degrees clockwise from 12 o'clock.
@@ -1001,7 +927,7 @@ function pwTyre(C,k){
     <div class="pw-cell-b mt2"><span>Brake temp</span><span>${Math.round(brake)}°C</span></div>
     <div class="pw-meter mt1" role="meter" aria-label="${name} brake temperature" aria-valuenow="${Math.round(brake)}" aria-valuemin="0" aria-valuemax="1000" aria-valuetext="${Math.round(brake)} degrees Celsius"><div class="${bc}" style="width:${bp}%"></div></div></div>`;
 }
-function renderTelemetry(E,checking){
+function renderCompact(E){
   const A=E.analysis,b=A.briefing,C=E.car,T=C.telemetry,st=C.status,L=C.lapData,se=C.session;
   put('pwTiming',`<div class="pit-metric"><span>Driver / position</span><strong>${esc(E.name)} <em>P${L.carPosition}</em></strong></div>
     <div class="pit-metric"><span>Lap</span><strong>${L.currentLapNum}<em>${se.totalLaps?` / ${se.totalLaps}`:''}</em></strong></div>
@@ -1010,8 +936,8 @@ function renderTelemetry(E,checking){
     <div class="pit-metric"><span>Session / track</span><strong>${esc(se.sessionType)} · ${esc(se.trackName)}</strong></div>
     <div class="pit-metric"><span>Weather / track</span><strong>${esc(se.weather)} <em>${se.trackTemperature}°C</em></strong></div>`);
   put('pwStrategy',`<div class="pit-panel-heading"><h2>Engineer call</h2><span>${esc(b.sessionLabel)}</span></div>
-    <p class="pit-call"${checking?' style="color:#ff2a2a"':''}>${checking?'We are checking…':esc(b.headline)}</p>
-    <p class="pit-rationale">${checking?'':esc(b.rationale)}</p>
+    <p class="pit-call">${esc(b.headline)}</p>
+    <p class="pit-rationale">${esc(b.rationale)}</p>
     <div class="pit-radio-inline"><div class="pw-row"><span class="pw-lab">Pit wall radio</span><button type="button" data-act="radio" aria-pressed="${speaking}" class="pit-button">${speaking?'Mute':'Play voice'}</button></div><p>${esc(A.radioMessage)}</p></div>
     <dl class="pit-call-list"><div><dt>${esc(b.pitLabel)}</dt><dd>${esc(b.pitCall)}</dd></div><div><dt>Next compound</dt><dd>${esc(b.tyreCall)}</dd></div><div><dt>Fuel mix</dt><dd>${esc(b.fuelCall)}</dd></div></dl>`);
   const ers=Math.max(0,Math.min(100,Math.round(st.ersStoreEnergy/40000)));
@@ -1066,11 +992,11 @@ Front Left / Right: ${s.frontLeftTyrePressure} PSI
 Rear Left / Right: ${s.rearLeftTyrePressure} PSI
 ======================================================`;
 }
-async function copyText(text){
+async function copyText(text,ok){
   // navigator.clipboard only exists on https or localhost; other drivers open the page over plain http
-  try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);return true;}}catch(e){}
+  try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);toast(ok);return;}}catch(e){}
   const ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();
-  let done=false;try{done=document.execCommand('copy');}catch(e){}ta.remove();return done;
+  let done=false;try{done=document.execCommand('copy');}catch(e){}ta.remove();toast(done?ok:'Could not copy on this browser');
 }
 function radio(){
   const A=S&&S.engineer&&S.engineer.analysis;
@@ -1086,25 +1012,25 @@ function radio(){
 document.addEventListener('click',async ev=>{
   const t=ev.target.closest('button');if(!t)return;
   if(t.dataset.filter){feedFilter=t.dataset.filter;lastFeed='';try{localStorage.setItem('pw.feed2',feedFilter);}catch(e){}renderFeed();}
+  else if(t.dataset.sel){sel=+t.dataset.sel;try{localStorage.setItem('pw.sel',sel);}catch(e){}renderAll();}
+  else if(t.dataset.metric){metric=t.dataset.metric;try{localStorage.setItem('pw.metric',metric);}catch(e){}renderAll();}
+  else if(t.dataset.inc)openIncident(t.dataset.inc,t.dataset.sess);
   else if(t.dataset.open)openSummary(t.dataset.open);
   else if(t.dataset.keep){if(await post('/api/keep',{session:t.dataset.keep,keep:t.dataset.v==='1'})){toast(t.dataset.v==='1'?'Raw data will be kept':'Raw data can be deleted again');setTimeout(loadSessions,800);}}
   else if(t.dataset.del){if(await post('/api/delete-raw',{session:t.dataset.del})){toast('Raw data deleted');setTimeout(loadSessions,800);}}
   else if(t.dataset.act==='keepPending'){if(await post('/api/keep-all-pending'))toast('Earlier raw data will be kept');}
   else if(t.dataset.act==='openSummary')openSummary(t.dataset.id);
-  else if(t.dataset.act==='lovelyHide'){lovelySeen=t.dataset.key;render();}
   else if(t.dataset.view)showView(t.dataset.view);
   else if(t.dataset.eng)pickDriver(t.dataset.eng);
+  else if(t.dataset.englayout){engLayout=t.dataset.englayout;try{localStorage.setItem('pw.engLayout',engLayout);}catch(e){}renderEngineer();}
   else if(t.dataset.fb){const id=t.dataset.fb;setFb(engFb.includes(id)?engFb.filter(x=>x!==id):[...engFb,id]);}
-  else if(t.dataset.retab){engTab=t.dataset.retab;renderEngineer();}
-  else if(t.dataset.engpane){engPane=t.dataset.engpane;try{localStorage.setItem('pw.engPane',engPane);}catch(e){}renderEngineer();}
+  else if(t.dataset.act==='fbclear')setFb([]);
   else if(t.dataset.act==='radio')radio();
-  else if(t.dataset.act==='copySetup'&&S&&S.engineer&&S.engineer.analysis){
-    if(await copyText(setupText(S.engineer))){copiedUntil=Date.now()+2000;renderEngineer();setTimeout(renderEngineer,2050);}else toast('Could not copy on this browser');}
+  else if(t.dataset.act==='copySetup'&&S&&S.engineer&&S.engineer.analysis)copyText(setupText(S.engineer),'Setup copied');
 });
-$('hammerBtn').onclick=async()=>{const on=!HAMMER();if(await post('/api/hammer',{on}))toast(on?'Hammer Time. Serious mode on for everyone.':'Hammer Time off. The banter is back.');};
-async function flag(){if(await post('/api/flag',{}))toast(HAMMER()?'Flagged as an incident.':'Noted. Investigation after the race.');}
+async function flag(){if(await post('/api/flag',{}))toast('Flagged. Saving 20 s before and 10 s after.');}
 $('flagBtn').onclick=flag;
-document.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='f'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();flag();}});
+document.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='f'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&!$('dlg').open){e.preventDefault();flag();}});
 
 // One live stream per tab. On the engineer page it also carries that driver's analysis, so it is
 // reopened whenever the driver or their handling feedback changes.

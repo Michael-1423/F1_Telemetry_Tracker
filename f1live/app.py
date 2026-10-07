@@ -12,19 +12,20 @@ from typing import Iterable
 
 from . import engineer as ENG
 from . import packets as P
-from .incidents import IncidentRecorder
+from .fun import Fun
+from .incidents import IncidentLog
 from .model import Session
 from .storage import (RAW_NAME, RawWriter, Retention, SessionStore, dir_size, free_disk_bytes, read_any,
                       write_json)
 from .summary import build_summary, driver_detail, snapshot, summary_markdown
 
-VERSION = "1.0"
+VERSION = "1.1"
 
 
 class SessionCtx:
-    def __init__(self, session: Session, recorder: IncidentRecorder):
+    def __init__(self, session: Session, incidents: IncidentLog):
         self.session = session
-        self.recorder = recorder
+        self.incidents = incidents
         self.raw: RawWriter | None = None
         self.pending: list[tuple[float, str, bytes]] = []   # packets before the folder exists
         self.events_file = None
@@ -44,7 +45,7 @@ class Pipeline:
                                    float(st.get("delete_grace_seconds", 120)), st.get("delete_trigger", "race"),
                                    bool(st.get("delete_incidents", True)))
         self.record_raw = bool(st.get("record_raw", True))
-        # which session kinds keep raw packets / incident packages (practice & quali: summaries only)
+        # which session kinds keep raw packets and list incidents (practice & quali: summaries only)
         self.raw_kinds = set(st.get("record_raw_for", ["race"]))
         self.incident_kinds = set(cfg.get("incidents", {}).get("sessions", ["race"]))
         self.end_timeout = float(cfg.get("session", {}).get("end_timeout_seconds", 90))
@@ -58,6 +59,7 @@ class Pipeline:
         self._detail_sig = None
         self.snapshot_version = 0
         self.engineer_inputs: dict[str, dict] = {}   # lower-case driver name -> race engineer input
+        self.fun = Fun(self.store.base)
         self.cond = threading.Condition()
         self.stats = {"packets": 0, "bad": 0, "other_format": 0, "started": time.time()}
         self.last_packet_wall = 0.0
@@ -92,14 +94,12 @@ class Pipeline:
                 self._open_folder(ctx, wall)
         elif ctx.raw:
             ctx.raw.write(wall, key, payload)
-        ctx.recorder.feed(wall, key, payload)   # rolling buffer; packages are only written when triggered
         if self.current is None or self.current.finalized or self.current.session.started_wall <= s.started_wall:
             self.current = ctx
 
     def _new_ctx(self, uid: int, wall: float) -> SessionCtx:
-        recorder = IncidentRecorder(self.cfg)
         s = Session(uid, wall, self.cfg, emit_hook=self._on_event)
-        ctx = SessionCtx(s, recorder)
+        ctx = SessionCtx(s, IncidentLog(self.cfg))
         ctx.keep_raw_on_create = self.keep_next_raw
         self.sessions[uid] = ctx
         self._log(f"new session {uid:x}")
@@ -130,7 +130,8 @@ class Pipeline:
         if ctx is None:
             return
         if s.kind in self.incident_kinds or ev["kind"] == "manual":
-            ctx.recorder.trigger(s, ev)
+            ctx.incidents.trigger(s, ev)
+        self.fun.on_event(ev, s.track_name)
         if ctx.events_file:
             ctx.events_file.write(json.dumps(ev) + "\n")
 
@@ -143,6 +144,7 @@ class Pipeline:
             "is_race": s.is_race, "total_laps": s.total_laps, "started": s.started_wall, "last_packet": s.last_wall,
             "status": status, "humans": [s.display_name(c.idx) for c in s.humans()],
             "sources": {k: v.player_car for k, v in s.sources.items()}, "app_version": VERSION,
+            "incidents": len(ctx.incidents.done),
         })
 
     # ------------------------------------------------------------------ tick
@@ -152,7 +154,6 @@ class Pipeline:
             if ctx.finalized:
                 continue
             s = ctx.session
-            ctx.recorder.tick(s, wall)
             quiet = wall - s.last_wall
             newer = any(o is not ctx and not o.finalized and o.session.started_wall > s.started_wall
                         for o in self.sessions.values())
@@ -160,6 +161,8 @@ class Pipeline:
                 self.finalize(ctx)
             elif ctx.events_file:
                 ctx.events_file.flush()
+        if self.current and not self.current.finalized:
+            self.fun.tick(self.current.session)
         self.retention.tick(wall if self.mode == "live" else time.time())
         self._drain_commands()
 
@@ -168,16 +171,16 @@ class Pipeline:
             return
         s = ctx.session
         s.ended = True
-        ctx.recorder.flush(s)
         ctx.finalized = True
         if ctx.raw:
             ctx.raw.close()
         if s.path:
-            sm = build_summary(s, ctx.recorder.done)
+            sm = build_summary(s, ctx.incidents.done)
             write_json(os.path.join(s.path, "summary.json"), sm)
             with open(os.path.join(s.path, "summary.md"), "w", encoding="utf-8") as f:
                 f.write(summary_markdown(sm))
             self._write_meta(ctx, "finished")
+            self.fun.refresh()
             if ctx.events_file:
                 ctx.events_file.close()
                 ctx.events_file = None
@@ -199,6 +202,8 @@ class Pipeline:
                     self.flag(arg or "")
                 elif cmd == "keep":
                     self.retention.keep(arg["session"], bool(arg.get("keep", True)))
+                elif cmd == "hammer":
+                    self.fun.set_hammer(bool(arg))
                 elif cmd == "keep_all_pending":
                     self.retention.keep_all_pending()
                 elif cmd == "delete_raw":
@@ -249,7 +254,8 @@ class Pipeline:
         extra["app"]["detail_version"] = self.detail_version
         roster, engineer_inputs = ENG.inputs(s) if s is not None else ([], {})
         extra["roster"] = roster
-        snap = snapshot(s, ctx.recorder.done if ctx else [], extra)
+        extra["fun"] = self.fun.snapshot(s, now if self.mode == "live" else time.time())
+        snap = snapshot(s, ctx.incidents.done if ctx else [], extra)
         data = json.dumps(snap, default=_default, separators=(",", ":")).encode()
         with self.cond:
             self.snapshot_bytes = data

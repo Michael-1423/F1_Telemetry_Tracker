@@ -5,7 +5,6 @@
     python -m f1live send FILE [--to HOST:PORT] [--speed 1]   test a live setup with a recording
     python -m f1live sessions              list recorded sessions
     python -m f1live keep SESSION [--off]  keep (or stop keeping) a session's raw data
-    python -m f1live prompt INCIDENT_DIR   rebuild prompt.md for a saved incident
 """
 
 from __future__ import annotations
@@ -78,8 +77,6 @@ def main(argv: list[str] | None = None) -> None:
     kp = sub.add_parser("keep", help="keep a session's raw data from automatic deletion")
     kp.add_argument("session")
     kp.add_argument("--off", action="store_true", help="allow it to be deleted again")
-    pp = sub.add_parser("prompt", help="rebuild prompt.md for an incident folder")
-    pp.add_argument("incident_dir")
 
     a = ap.parse_args(argv)
     cfg = load_config(a.config)
@@ -105,15 +102,6 @@ def main(argv: list[str] | None = None) -> None:
         signal.signal(signal.SIGINT, lambda *_: stop.set())
         n = send_udp(a.file, (host or "127.0.0.1", int(port)), None if a.speed == "max" else float(a.speed), stop, a.start)
         print(f"sent {n} packets")
-        return
-    if cmd == "prompt":
-        import gzip
-        from .incidents import build_prompt
-        with gzip.open(os.path.join(a.incident_dir, "incident.json.gz"), "rt", encoding="utf-8") as f:
-            meta = json.load(f)
-        with open(os.path.join(a.incident_dir, "prompt.md"), "w", encoding="utf-8") as f:
-            f.write(build_prompt(meta))
-        print(os.path.join(a.incident_dir, "prompt.md"))
         return
 
     if getattr(a, "port", None):
