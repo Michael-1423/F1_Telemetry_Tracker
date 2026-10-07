@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pit Wall</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%2315151e'/><polygon points='9,46 25,18 55,18 39,46' fill='%23e10600'/></svg>">
+<meta name="theme-color" content="#15151e">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('pw.theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}catch(e){document.documentElement.dataset.theme='light';}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -123,13 +125,14 @@ section.block{margin-top:36px;display:grid;grid-template-columns:minmax(0,1fr);g
 
 /* ---------------- live driver rows ---------------- */
 .live{display:grid;gap:8px}
-.lrow,.lhead{display:grid;grid-template-columns:52px minmax(200px,1.5fr) 118px 128px 92px 124px 104px 150px 72px}
+.lrow,.lhead{display:grid;grid-template-columns:70px minmax(200px,1.5fr) 118px 128px 92px 124px 104px 150px 72px}
 .lrow{align-items:stretch;background:var(--card);border-radius:var(--r);min-height:68px;overflow:hidden}
 .lrow.pitting{background:var(--pit-row)}
 .lhead{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .lhead div,.lrow>div{padding:10px 12px;display:flex;flex-direction:column;justify-content:center;gap:2px}
 .lrow>div+div{border-left:1px solid var(--line)}
-.pos{font-weight:700;font-size:24px;align-items:center}
+.pos{font-weight:700;font-size:24px;align-items:center;line-height:1.1}
+.pos .iv{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
 .lrow.out{opacity:.55}
 .drv{position:relative;padding-left:22px!important}
 .drv::before{content:"";position:absolute;left:10px;top:14px;bottom:14px;width:4px;border-radius:2px;background:var(--tc)}
@@ -377,6 +380,171 @@ body.eng-dark .msgbox .muted{color:#a3a3a3}
 .re-kv{display:flex;justify-content:space-between;align-items:center;padding:.125rem 0}
 .re-kv>span{color:#a3a3a3}
 .re-kv>b{color:#fff;background:#171717;padding:.125rem .5rem;border-radius:.25rem;border:1px solid #262626}
+
+/* ---------------- my telemetry ----------------
+   The original app's one-screen pit wall (F1_Race_Engineer c573a17: PitWallOverview.tsx + globals.css) for the
+   selected driver, with speed, rpm, gear, throttle and brake on one dial. The pit-* rules are copied as they are;
+   the short classes before them stand in for the Tailwind utilities the component uses. */
+.engbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 16px}
+.engbar .tabs{flex:1;min-width:0}
+.engpane{display:flex;gap:2px;padding:3px;border-radius:var(--r-sm);background:#111214}
+.engpane button{border:0;background:transparent;padding:5px 12px;cursor:pointer;font:600 12px var(--mono);color:#a3a3a3;border-radius:6px;white-space:nowrap}
+.engpane button:hover{color:#fff}
+.engpane button[aria-pressed="true"]{background:#083344;color:#67e8f9}
+.pwc{width:100%;max-width:80rem;margin-inline:auto;color:#f5f5f5;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+.pwc h2,.pwc p,.pwc dl,.pwc dd,.pwc ol,.pwc li{margin:0;padding:0}
+.pwc h2{line-height:inherit}
+.pwc ol{list-style:none}
+.pwc button{font:inherit;background:transparent}
+.pwc .pw-meter>div{height:100%}
+.pwc .pit-tyre-cell{border:1px solid #262626;border-radius:.5rem;background:rgba(10,10,10,.75);padding:.75rem}
+.pwc .pw-cell-h{display:flex;align-items:center;justify-content:space-between;font-size:.75rem;line-height:1rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.pwc .pw-cell-b{display:flex;justify-content:space-between;gap:.25rem;font-size:11px;color:#a3a3a3}
+.pwc .pw-meter{height:.375rem;overflow:hidden;border-radius:.25rem;background:#262626}
+.pwc .pw-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.pwc .pw-lab{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#d4d4d4}
+.pwc .mt2{margin-top:.5rem}.pwc .mt1{margin-top:.25rem}.pwc .tr{text-align:right}
+.pwc .c-em4{background:#34d399}.pwc .c-red4{background:#f87171}.pwc .c-amb4{background:#fbbf24}
+.pwc .c-em5{background:#10b981}.pwc .c-amb5{background:#f59e0b}.pwc .c-red5{background:#ef4444}
+.pwc .t-amb4{color:#fbbf24}.pwc .t-cy3{color:#67e8f9}
+
+.pit-wall-grid { display: grid; gap: .75rem; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "timing timing timing" "strategy car tyres" "laps laps laps"; }
+.pit-panel { min-width: 0; border: 1px solid #262626; border-radius: .75rem; background: #111214; padding: .875rem; }
+.pit-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; border-bottom: 1px solid #262626; padding-bottom: .5rem; }
+.pit-panel-heading h2 { color: #f5f5f5; font-size: .75rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.pit-panel-heading span { color: #67e8f9; font-size: .7rem; text-align: right; }
+.pit-panel-heading .pit-drs-badge { border: 1px solid #404040; border-radius: .35rem; background: #262626; padding: .25rem .45rem; color: #a3a3a3; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
+.pit-panel-heading .pit-drs-active { border-color: #059669; background: #064e3b; color: #6ee7b7; }
+.pit-panel-heading .pit-drs-ready { border-color: #b45309; background: #451a03; color: #fcd34d; }
+.pit-wall-timing { grid-area: timing; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .5rem; }
+.pit-metric { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: .35rem; border-right: 1px solid #262626; padding-right: .5rem; }
+.pit-metric:last-child { border-right: 0; }
+.pit-metric > span, .pit-car-primary span { color: #a3a3a3; font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; }
+.pit-metric strong { overflow: hidden; color: white; font-size: 1.1rem; white-space: nowrap; text-overflow: ellipsis; }
+.pit-metric strong.pw-inv { color: #f87171; }
+.pit-metric em { color: #67e8f9; font-size: .75rem; font-style: normal; }
+.pit-wall-strategy { grid-area: strategy; display: flex; flex-direction: column; }
+.pit-call { margin-top: 1rem; color: #67e8f9; font-size: clamp(1.25rem, 2vw, 1.9rem); font-weight: 900; line-height: 1.1; }
+.pit-rationale { margin-top: .75rem; color: #a3a3a3; font-size: .75rem; line-height: 1.5; }
+.pit-call-list { margin-top: 0; }
+.pit-call-list > div { display: flex; justify-content: space-between; gap: .5rem; border-top: 1px solid #262626; padding: .7rem 0; }
+.pit-call-list dt, .pit-car-secondary dt { color: #a3a3a3; font-size: .7rem; }
+.pit-call-list dd { color: #fff; font-size: .8rem; font-weight: 800; text-align: right; }
+.pit-radio-inline { margin-block: auto; border-block: 1px solid #262626; padding-block: .5rem; }
+.pit-radio-inline p { margin-top: .4rem; color: #d4d4d4; font-size: .72rem; line-height: 1.35; }
+.pit-wall-car { grid-area: car; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; }
+.pit-car-primary { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+.pit-car-primary > div { display: flex; flex-direction: column; }
+.pit-car-primary strong { color: #fff; font-size: clamp(2.7rem, 4vw, 4.5rem); font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.pit-car-primary small { color: #a3a3a3; font-size: .75rem; }
+.pit-inputs { display: grid; gap: .75rem; margin-top: 1.5rem; }
+.pit-energy-grid { min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin-top: .75rem; }
+.pit-energy-card { min-width: 0; display: flex; flex-direction: column; justify-content: space-between; gap: .4rem; border: 1px solid #262626; border-radius: .5rem; background: #090a0c; padding: .6rem; }
+.pit-energy-heading { display: flex; justify-content: space-between; gap: .25rem; color: #a3a3a3; font-size: .65rem; text-transform: uppercase; }
+.pit-energy-heading strong { color: #fbbf24; font-size: .75rem; text-align: right; text-transform: none; white-space: nowrap; }
+.pit-energy-card:last-child .pit-energy-heading strong { color: #34d399; }
+.pit-energy-track { height: .6rem; overflow: hidden; border-radius: .3rem; background: #262626; }
+.pit-energy-track > div { height: 100%; }
+.pit-energy-card small { color: #a3a3a3; font-size: .6rem; }
+.pit-fuel-amount { color: #fff; font-size: 1.15rem; font-weight: 800; }
+.pit-fuel-amount small { font-weight: 400; }
+.pit-car-secondary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; padding-top: .6rem; }
+.pit-car-secondary dd { color: #fff; font-size: .9rem; font-weight: 800; }
+.pit-wall-tyres { grid-area: tyres; display: flex; flex-direction: column; }
+.pit-tyre-grid { min-height: 0; display: grid; flex: 1; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(2, minmax(0, 1fr)); gap: .6rem; margin-top: .75rem; }
+.pit-tyre-cell { display: flex; flex-direction: column; justify-content: space-between; }
+.pit-tyre-details { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .25rem; }
+.pit-tyre-details span { display: block; color: #737373; font-size: .55rem; text-transform: uppercase; }
+.pit-tyre-details strong { display: block; color: #fff; font-size: .9rem; }
+.pit-tyre-details small { color: #737373; font-size: .55rem; font-weight: 400; }
+.pit-tyre-tread { position: relative; display: flex; flex-direction: column; justify-content: flex-end; width: 2.1rem; height: 3rem; overflow: hidden; border: 2px solid #404040; border-radius: .35rem; background: #171717; padding: .15rem; }
+.pit-tyre-tread > div { width: 100%; border-radius: .2rem; }
+.pit-tyre-tread strong { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: .55rem; text-shadow: 0 1px 2px #000; }
+.pit-wall-laps p { margin-top: .8rem; color: #d4d4d4; font-size: .8rem; line-height: 1.5; }
+.pit-button { border: 1px solid #155e75; border-radius: .4rem; padding: .3rem .6rem; color: #67e8f9; font-size: .7rem; cursor: pointer; }
+.pit-button:hover, .pit-button:focus-visible { background: #164e63; outline: 2px solid #67e8f9; outline-offset: 2px; }
+.pit-wall-laps { grid-area: laps; }
+.pit-wall-laps ol { display: flex; gap: .75rem; margin-top: .5rem; }
+.pit-wall-laps li { display: flex; justify-content: space-between; flex: 1; gap: .5rem; border-right: 1px solid #262626; padding-right: .75rem; font-size: .72rem; }
+.pit-wall-laps li:last-child { border-right: 0; }
+.pit-wall-laps li span { color: #a3a3a3; }
+.pit-wall-laps li strong { color: #fff; text-align: right; }
+
+@media (min-width: 1024px) and (min-height: 650px) {
+  body.eng-fit .pwc { flex: 1; min-height: 0; padding: .75rem 0; }
+  .pit-wall-grid { height: 100%; grid-template-rows: 6.25rem minmax(0, 1fr) 5rem; }
+}
+
+@media (min-width: 1024px) and (min-height: 650px) and (max-height: 850px) {
+  body.eng-fit .pwc { padding: .5rem 0; }
+  .pit-wall-grid { gap: .5rem; grid-template-rows: 4.75rem minmax(0, 1fr) 4.25rem; }
+  .pit-panel { padding: .6rem; }
+  .pit-panel-heading { padding-bottom: .35rem; }
+  .pit-metric { gap: .15rem; }
+  .pit-metric strong { font-size: .95rem; }
+  .pit-call { margin-top: .5rem; font-size: 1.25rem; }
+  .pit-rationale { margin-top: .4rem; font-size: .68rem; line-height: 1.35; }
+  .pit-call-list > div { padding: .35rem 0; }
+  .pit-car-primary { margin-top: .4rem; }
+  .pit-car-primary strong { font-size: 2.2rem; }
+  .pit-inputs { gap: .3rem; margin-top: .45rem; }
+  .pit-energy-grid { gap: .35rem; margin-top: .4rem; }
+  .pit-energy-card { gap: .25rem; padding: .4rem; }
+  .pit-car-secondary { gap: .2rem; padding-top: .35rem; }
+  .pit-car-secondary dd { font-size: .8rem; }
+  .pit-tyre-grid { gap: .4rem; margin-top: .45rem; }
+  .pwc .pit-tyre-cell { padding: .5rem; }
+  .pit-tyre-cell > div:not(:first-child) { margin-top: .3rem; }
+  .pit-wall-laps p { margin-top: .4rem; font-size: .7rem; line-height: 1.3; }
+  .pit-wall-laps li { font-size: .65rem; }
+}
+
+@media (max-width: 1023px) {
+  .pwc { padding: 1rem 0; }
+  .pit-wall-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "timing timing" "strategy car" "tyres tyres" "laps laps"; }
+  .pit-wall-timing { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pit-tyre-grid { grid-template-rows: none; }
+}
+
+@media (max-width: 700px) {
+  .pit-wall-grid { grid-template-columns: 1fr; grid-template-areas: "timing" "strategy" "car" "tyres" "laps"; }
+  .pit-wall-timing { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pit-metric:nth-child(even) { border-right: 0; }
+  .pit-wall-laps ol { display: block; }
+  .pit-wall-laps li { border-right: 0; border-bottom: 1px solid #262626; padding: .3rem 0; }
+}
+
+/* Our change to the original: speed, rpm, gear, throttle and brake on one dial (as in MultiViewer)
+   instead of the big numbers and two bars. The dial takes the panel's spare height. */
+.pit-wall-car { grid-template-rows: auto minmax(0, 1fr) auto auto; }
+.pw-gauge { min-height: 0; display: flex; align-items: center; justify-content: center; margin-top: .5rem; }
+.pw-gauge svg { display: block; width: 100%; max-width: 300px; height: auto; overflow: visible; }
+.pw-gauge .trk { fill: none; stroke: #262626; }
+.pw-gauge .spd { fill: none; stroke: #3b82f6; }
+.pw-gauge .thr { fill: none; stroke: #34d399; }
+.pw-gauge .brk { fill: none; stroke: #f87171; }
+.pw-gauge text { font-family: inherit; text-anchor: middle; dominant-baseline: middle; }
+.pw-gauge .tick { fill: #a3a3a3; font-size: 7.5px; }
+.pw-gauge .lbl { fill: #a3a3a3; font-size: 6.5px; letter-spacing: .12em; }
+.pw-gauge .big { fill: #fff; font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pw-gauge .mid { fill: #fff; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pw-gauge .unit { fill: #a3a3a3; font-size: 7.5px; letter-spacing: .1em; }
+@media (min-width: 1024px) and (min-height: 650px) {
+  body.eng-fit .pw-gauge svg { width: auto; height: 100%; max-width: 100%; }
+}
+
+/* ---------------- empty / dialog / toast ---------------- */
+.empty{padding:56px 0;display:grid;gap:14px;justify-items:start;max-width:760px}
+.empty h2{font-size:36px}
+.empty ol{color:var(--ink-2);line-height:1.7;margin:0;padding-left:20px}
+.hidden{display:none!important}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;font-weight:600;z-index:60;border-radius:var(--r-sm)}
+dialog{border:0;background:var(--page);color:var(--ink);width:min(980px,94vw);max-height:88vh;padding:0;border-radius:var(--r);box-shadow:0 20px 60px rgba(21,21,30,.3)}
+dialog::backdrop{background:rgba(21,21,30,.45)}
+dialog .dh{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid var(--line)}
+dialog pre{margin:0;padding:18px;white-space:pre-wrap;font:12.5px/1.55 ui-monospace,Consolas,monospace;max-height:70vh;overflow:auto;color:var(--ink-2);background:var(--card)}
+.log{font:11px ui-monospace,Consolas,monospace;color:var(--dim);padding-top:22px}
+
 /* one screen on a laptop or desktop */
 @media (min-width:1024px) and (min-height:650px){
   body.eng-fit{height:100dvh;overflow:hidden;display:flex;flex-direction:column;padding-bottom:0}
@@ -452,7 +620,7 @@ body.eng-dark .msgbox .muted{color:#a3a3a3}
 
     <section class="block" id="raceSection">
       <div class="shead"><h2>Drivers</h2><p>Live car data for every human driver: what the in-game timing doesn't show.</p><div class="mald maldslot"></div></div>
-      <div class="lhead" aria-hidden="true"><div>Pos</div><div>Driver</div><div title="Average wear, and the tyre with its age in laps">Tyres</div><div title="Fastest lap, last lap below">Fastest lap</div><div>Top speed</div><div title="Front wing damage, worst side; front-left, front-right / rear wing below">Wing damage</div><div title="Fuel mix, and laps of fuel to spare (+) or short (−)">Fuel mix</div><div>ERS</div><div title="All four wheels beyond the white lines">Wheels off</div></div>
+      <div class="lhead" aria-hidden="true"><div title="Position, and the interval to the next human driver ahead (AI cars don't count)">Pos</div><div>Driver</div><div title="Average wear, and the tyre with its age in laps">Tyres</div><div title="Fastest lap, last lap below">Fastest lap</div><div>Top speed</div><div title="Front wing damage, worst side; front-left, front-right / rear wing below">Wing damage</div><div title="Fuel mix, and laps of fuel to spare (+) or short (−)">Fuel mix</div><div>ERS</div><div title="All four wheels beyond the white lines">Wheels off</div></div>
       <div class="live" id="live"></div>
     </section>
 
@@ -473,7 +641,8 @@ body.eng-dark .msgbox .muted{color:#a3a3a3}
 
 <main id="engineerView" class="hidden">
   <section class="block">
-    <div class="tabs" id="engTabs" role="tablist"></div>
+    <div class="engbar"><div class="tabs" id="engTabs" role="tablist"></div>
+      <div class="engpane" id="engPane" role="group" aria-label="Engineer view"><button type="button" data-engpane="engineer" aria-pressed="true">Engineer</button><button type="button" data-engpane="telemetry" aria-pressed="false">My telemetry</button></div></div>
     <div id="engBody"></div>
   </section>
 </main>
@@ -562,7 +731,11 @@ function driverExtras(name){
 function renderLive(){
   const rows=S.live||[],hammer=HAMMER(),chk=FUN().checking;
   const bests=rows.map(d=>d.best).filter(Boolean),fastest=bests.length?Math.min(...bests):null;
-  const tops=rows.map(d=>d.top_speed||0),topv=Math.max(0,...tops);
+  const tops=rows.map(d=>d.top_speed||0),topv=Math.max(0,...tops),hg=S.human_gaps||{};
+  // interval to the next human ahead on the road, ignoring AI cars
+  const ivl=d=>{const g=hg[d.idx];if(!g)return '';
+    const v=g.laps>=1?`+${g.laps} lap${g.laps>1?'s':''}`:g.s!=null?`+${g.s.toFixed(1)}`:'';
+    return v?`<span class="iv num" title="Interval to ${esc(g.to)}, the next human driver ahead">${v}</span>`:'';};
   $('live').innerHTML=rows.map(d=>{
     const out=['retired','disqualified','not classified','did not finish'].includes(d.state);
     const x=driverExtras(d.name),tags=[...x.tags];
@@ -572,7 +745,7 @@ function renderLive(){
     if(d.warnings)tags.push(`<span class="tag amber">${d.warnings} warn</span>`);
     if(d.invalid)tags.push('<span class="tag">Lap invalid</span>');
     const wc=v=>v>=60?'t-red':v>=40?'t-yellow':'';const g=d.dmg||{};const dc=v=>v>=50?'t-red':v>=20?'t-yellow':'';
-    const head=`<div class="pos num">${d.pos||'–'}</div>
+    const head=`<div class="pos num">${d.pos||'–'}${ivl(d)}</div>
       <div class="drv" style="--tc:${d.color}"><span class="n">${esc(d.name)}${d.own?OWN_DOT:''}</span><span class="t">${esc(d.team)} · <b class="num">${x.pts}</b> pts${d.own?'':' · via other game'}</span>${tags.length?`<span class="tags">${tags.join('')}</span>`:''}</div>`;
     if(chk&&chk.idx===d.idx)return `<div class="lrow${d.pit?' pitting':''}">${head}<div class="checking" role="status">We are checking<span class="dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span><span>.</span><span>.</span></span></div></div>`;
     const tyreCell=(d.puncture||[]).length?`<div class="tyrecell punct" data-l="Tyres"><span>PUNCTURE</span>${esc(d.puncture.join(' · '))}</div>`
@@ -624,6 +797,8 @@ function renderTimesheet(){
 
 const FILTERS=[['drivers','Drivers'],['major','Major'],['limits','Track limits'],['race','Race control'],['pit','Pit'],['all','Everything']];
 const incChip=id=>`<span class="incchip" title="Incident ${esc(id)}">${HAMMER()?'Incident '+esc(id):'Investigation after the race'}</span>`;
+// only contact between human drivers (and a manual flag) goes to the stewards; solo moments and AI clashes don't
+const forStewards=e=>e.incident&&(e.humans.length>=2||e.kind==='manual');
 function renderFeed(){
   $('feedFilters').innerHTML=FILTERS.map(([k,l])=>`<button class="btn small" type="button" data-filter="${k}" aria-pressed="${feedFilter===k}">${l}</button>`).join('');
   const ev=(S.events||[]).filter(e=>{
@@ -638,7 +813,7 @@ function renderFeed(){
   if(sig===lastFeed)return;lastFeed=sig;
   $('feed').innerHTML=ev.slice(0,200).map(e=>`<div class="msg ${e.severity}"><span class="s"></span>
     <div class="k num"><b>${esc(e.clock||'')}</b>Lap ${e.lap??''}${e.corner?' · '+esc(e.corner):''}</div>
-    <div>${e.names.length?`<div class="w">${esc(e.names.join(' / '))}</div>`:''}<div class="x">${esc(e.text)}${e.incident?incChip(e.incident):''}</div></div></div>`).join('')
+    <div>${e.names.length?`<div class="w">${esc(e.names.join(' / '))}</div>`:''}<div class="x">${esc(e.text)}${forStewards(e)?incChip(e.incident):''}</div></div></div>`).join('')
     ||'<div class="muted" style="padding:14px">Nothing yet.</div>';
 }
 
@@ -706,8 +881,8 @@ function fromHash(){const h=location.hash;if(h==='#sessions')return['sessions'];
 // One driver's engineer page: the original app's RaceEngineer, panel for panel. The stream carries that
 // driver's analysis with this viewer's handling feedback applied; the feedback stays on this device, per
 // driver and track.
-let view='live',engName=null,engFb=[],fbFor=null,engState=null,speaking=false,engTab='recommendations',copiedUntil=0;
-try{engName=localStorage.getItem('pw.engineer')||null;}catch(e){}
+let view='live',engName=null,engFb=[],fbFor=null,engState=null,speaking=false,engTab='recommendations',copiedUntil=0,engPane='engineer';
+try{engName=localStorage.getItem('pw.engineer')||null;engPane=localStorage.getItem('pw.engPane')==='telemetry'?'telemetry':'engineer';}catch(e){}
 const engCache={};
 function put(id,html){const el=$(id);if(!el||engCache[id]===html)return;engCache[id]=html;el.innerHTML=html;}
 function fbKey(){return `pw.fb.${(engName||'').toLowerCase()}.${S&&S.session?S.session.track_id:''}`;}
@@ -746,7 +921,9 @@ function renderEngineer(){
   }
   const state=!S||!S.session?'nosession':!engName?'pick':!E||E.driver.toLowerCase()!==me?'loading':!E.found?'absent':!E.own?'notown':!E.car||!E.car.setup?'nosetup':E.analysis?'ready':'error';
   document.body.classList.toggle('eng-dark',view==='engineer');document.body.classList.toggle('eng-fit',view==='engineer'&&state==='ready');
-  if(state!==engState){engState=state;for(const k in engCache)if(k!=='engTabs')delete engCache[k];$('engBody').innerHTML=state==='ready'?RE_READY:'<div class="msgbox" id="engMsg"></div>';}
+  document.querySelectorAll('#engPane [data-engpane]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.engpane===engPane)));
+  const key=state==='ready'?state+'.'+engPane:state;
+  if(key!==engState){engState=key;for(const k in engCache)if(k!=='engTabs')delete engCache[k];$('engBody').innerHTML=state==='ready'?(engPane==='telemetry'?TEL_READY:RE_READY):'<div class="msgbox" id="engMsg"></div>';}
   const host=location.hostname,port=(S&&S.app&&S.app.udp_port)||20777,who=esc(engName||'');
   const msg={
     nosession:`<h3>Waiting for telemetry</h3><p>The engineer starts once a session is running and your game is sending telemetry to ${esc(host)}, port ${port}.</p>`,
@@ -759,6 +936,7 @@ function renderEngineer(){
   };
   if(state!=='ready'){put('engMsg',msg[state]);return;}
   const A=E.analysis,b=A.briefing,chk=FUN().checking,checking=!!(chk&&chk.idx===E.idx);
+  if(engPane==='telemetry'){renderTelemetry(E,checking);return;}
   put('reBrief',`<div class="re-bh"><div class="re-live"><span class="re-ping"><i></i><b></b></span><span class="re-lbl">${ICON.radio} Live engineer</span><span class="re-pill">${esc(b.sessionLabel)}</span></div>
       <button type="button" class="re-speak${speaking?' on':''}" data-act="radio" aria-pressed="${speaking}">${ICON.vol}${speaking?'Mute Radio':'Play Voice Radio'}</button></div>
     <div class="re-bb"><p class="re-eyebrow">Engineer priority</p><h3 id="reHead" class="re-head${checking?' checking-msg':''}">${checking?'We are checking…':esc(b.headline)}</h3><p class="re-rat">${checking?'':esc(b.rationale)}</p></div>
@@ -783,6 +961,74 @@ function renderEngineer(){
         <p class="re-why"><b>Race Engineer Rationale: </b>${esc(r.reason)}</p></div>`).join('')
       :`<div class="re-ok">${ICON.ok}<b>Car Setup is Currently Optimal</b><p>Telemetry shows balanced tyre degradation, stable cornering Gs, and zero excessive wheel slip for ${esc(E.car.session.trackName)}.</p></div>`)
     :`<div class="re-sheet">${SHEET.map(([t,range,rows])=>`<div class="re-grp"><h5><span>${t}</span>${range?`<span class="rng">${range}</span>`:''}</h5>${rows.map(([k,l,u])=>`<div class="re-kv"><span>${l}:</span><b>${esc(tgt[k])}${u}</b></div>`).join('')}</div>`).join('')}</div>`);
+}
+
+const TEL_READY=`<div class="pwc"><div class="pit-wall-grid">
+  <section class="pit-panel pit-wall-timing" aria-label="Live timing" id="pwTiming"></section>
+  <section class="pit-panel pit-wall-strategy" aria-label="Engineer strategy" id="pwStrategy"></section>
+  <section class="pit-panel pit-wall-car" aria-label="Live car telemetry" id="pwCar"></section>
+  <section class="pit-panel pit-wall-tyres" aria-label="Tyres and brakes" id="pwTyres"></section>
+  <section class="pit-panel pit-wall-laps" aria-label="Recent laps" id="pwLaps"></section></div></div>`;
+// My telemetry: the original's PitWallOverview, panel for panel, with the dial.
+const pwTime=s=>!s||s<0?'--:--.---':`${Math.floor(s/60)}:${(s%60).toFixed(3).padStart(6,'0')}`;
+// Dial: speed on the outer ring (0-360 km/h over 270°), throttle up the left and brake up the right
+// on the inner ring, speed / rpm / gear in the middle. Angles are degrees clockwise from 12 o'clock.
+const pwPt=(a,r)=>{const t=a*Math.PI/180;return `${(100+r*Math.sin(t)).toFixed(2)} ${(100-r*Math.cos(t)).toFixed(2)}`;};
+const pwArc=(a0,a1,r)=>a1-a0<0.5?'':`M ${pwPt(a0,r)} A ${r} ${r} 0 ${a1-a0>180?1:0} 1 ${pwPt(a1,r)}`;
+function pwGauge(T){
+  const cl=v=>Math.max(0,Math.min(1,+v||0)),sp=cl(T.speed/360),th=cl(T.throttle),br=cl(T.brake);
+  const ticks=[0,60,120,180,240,300,360].map(v=>{const a=-135+270*v/360;return `<text class="tick" x="${pwPt(a,74).split(' ')[0]}" y="${pwPt(a,74).split(' ')[1]}">${v}</text>`;}).join('');
+  const gear=T.gear===0?'N':T.gear===-1?'R':T.gear;
+  return `<div class="pw-gauge"><svg viewBox="0 0 200 200" role="img" aria-label="${T.speed} km/h, ${T.engineRPM} rpm, gear ${gear}, throttle ${Math.round(th*100)}%, brake ${Math.round(br*100)}%">
+    <path class="trk" stroke-width="9" d="${pwArc(-135,135,88)}"/><path class="spd" stroke-width="9" stroke-linecap="round" d="${pwArc(-135,-135+270*sp,88)}"/>
+    ${ticks}
+    <path class="trk" stroke-width="7" d="${pwArc(-135,-5,61)}"/><path class="thr" stroke-width="7" stroke-linecap="round" d="${pwArc(-135,-135+130*th,61)}"/>
+    <path class="trk" stroke-width="7" d="${pwArc(5,135,61)}"/><path class="brk" stroke-width="7" stroke-linecap="round" d="${pwArc(135-130*br,135,61)}"/>
+    <text class="lbl" transform="translate(47 100) rotate(-90)">THROTTLE</text><text class="lbl" transform="translate(153 100) rotate(90)">BRAKE</text>
+    <text class="big" x="100" y="82">${T.speed}</text><text class="unit" x="100" y="103">KMH</text>
+    <text class="mid" x="100" y="122">${T.engineRPM}</text><text class="unit" x="100" y="136">RPM</text>
+    <text class="unit" x="94" y="176">GEAR</text><text class="mid" x="${116}" y="175">${gear}</text></svg></div>`;
+}
+const PW_CORNER={fl:'Front left',fr:'Front right',rl:'Rear left',rr:'Rear right'};
+function pwTyre(C,k){
+  const T=C.telemetry,t=T.tyresInnerTemperature[k],surface=T.tyresSurfaceTemperature[k],wear=+C.damage.tyresWear[k],pressure=+T.tyresPressure[k],brake=T.brakesTemperature[k];
+  const hot=t>=105||wear>=60,bp=Math.max(0,Math.min(100,brake/10)),name=PW_CORNER[k];
+  const bc=brake>=900?'c-red4':brake>=700?'c-amb4':'c-em4',tread=wear>50?'c-red5':wear>30?'c-amb5':'c-em5';
+  return `<div class="pit-tyre-cell"><div class="pw-cell-h"><span>${name} (${k.toUpperCase()})</span><span class="${hot?'t-amb4':'t-cy3'}">${Math.round(t)}°C core</span></div>
+    <div class="pit-tyre-details mt2"><div><span>Surface</span><strong>${Math.round(surface)}°C</strong></div>
+      <div class="pit-tyre-tread" role="meter" aria-label="${name} tyre wear" aria-valuenow="${Math.round(wear)}" aria-valuemin="0" aria-valuemax="100" aria-valuetext="${wear.toFixed(1)} percent worn"><div class="${tread}" style="height:${Math.max(0,Math.min(100,100-wear))}%"></div><strong>${wear.toFixed(1)}%</strong></div>
+      <div class="tr"><span>Pressure</span><strong>${pressure.toFixed(1)} <small>PSI</small></strong></div></div>
+    <div class="pw-cell-b mt2"><span>Brake temp</span><span>${Math.round(brake)}°C</span></div>
+    <div class="pw-meter mt1" role="meter" aria-label="${name} brake temperature" aria-valuenow="${Math.round(brake)}" aria-valuemin="0" aria-valuemax="1000" aria-valuetext="${Math.round(brake)} degrees Celsius"><div class="${bc}" style="width:${bp}%"></div></div></div>`;
+}
+function renderTelemetry(E,checking){
+  const A=E.analysis,b=A.briefing,C=E.car,T=C.telemetry,st=C.status,L=C.lapData,se=C.session;
+  put('pwTiming',`<div class="pit-metric"><span>Driver / position</span><strong>${esc(E.name)} <em>P${L.carPosition}</em></strong></div>
+    <div class="pit-metric"><span>Lap</span><strong>${L.currentLapNum}<em>${se.totalLaps?` / ${se.totalLaps}`:''}</em></strong></div>
+    <div class="pit-metric"><span>Current time</span><strong class="${L.isCurrentLapInvalid?'pw-inv':''}">${pwTime(L.currentLapTime)}</strong></div>
+    <div class="pit-metric"><span>Best valid lap</span><strong>${pwTime(C.bestValidLap)}</strong></div>
+    <div class="pit-metric"><span>Session / track</span><strong>${esc(se.sessionType)} · ${esc(se.trackName)}</strong></div>
+    <div class="pit-metric"><span>Weather / track</span><strong>${esc(se.weather)} <em>${se.trackTemperature}°C</em></strong></div>`);
+  put('pwStrategy',`<div class="pit-panel-heading"><h2>Engineer call</h2><span>${esc(b.sessionLabel)}</span></div>
+    <p class="pit-call"${checking?' style="color:#ff2a2a"':''}>${checking?'We are checking…':esc(b.headline)}</p>
+    <p class="pit-rationale">${checking?'':esc(b.rationale)}</p>
+    <div class="pit-radio-inline"><div class="pw-row"><span class="pw-lab">Pit wall radio</span><button type="button" data-act="radio" aria-pressed="${speaking}" class="pit-button">${speaking?'Mute':'Play voice'}</button></div><p>${esc(A.radioMessage)}</p></div>
+    <dl class="pit-call-list"><div><dt>${esc(b.pitLabel)}</dt><dd>${esc(b.pitCall)}</dd></div><div><dt>Next compound</dt><dd>${esc(b.tyreCall)}</dd></div><div><dt>Fuel mix</dt><dd>${esc(b.fuelCall)}</dd></div></dl>`);
+  const ers=Math.max(0,Math.min(100,Math.round(st.ersStoreEnergy/40000)));
+  const deploy=st.ersDeployMode==null?'—':(['None','Medium','Hotlap','Overtake'][st.ersDeployMode]??'—');
+  const target=st.fuelRemainingLaps>0?st.fuelInTank/st.fuelRemainingLaps:null;
+  put('pwCar',`<div class="pit-panel-heading"><h2>Car telemetry</h2><span class="pit-drs-badge ${T.drs?'pit-drs-active':st.drsAllowed?'pit-drs-ready':''}">DRS ${T.drs?'active':st.drsAllowed?'ready':'off'}</span></div>
+    ${pwGauge(T)}
+    <div class="pit-energy-grid">
+      <div class="pit-energy-card" role="meter" aria-label="ERS battery" aria-valuenow="${ers}" aria-valuemin="0" aria-valuemax="100"><div class="pit-energy-heading"><span>ERS battery</span><strong>${ers}%</strong></div><div class="pit-energy-track"><div class="c-amb4" style="width:${ers}%"></div></div><small>Deploy mode · ${deploy}</small></div>
+      <div class="pit-energy-card"><div class="pit-energy-heading"><span>Fuel range</span><strong>${st.fuelRemainingLaps.toFixed(1)} laps</strong></div><div class="pit-fuel-amount">${st.fuelInTank.toFixed(1)} <small>kg</small></div><small>Lap target · ${target===null?'—':`~${target.toFixed(2)} kg/lap`}</small></div>
+    </div>
+    <dl class="pit-car-secondary"><div><dt>Compound</dt><dd>${esc(st.tyreCompound)}</dd></div><div><dt>Lateral G</dt><dd>${C.motion.gForceLateral.toFixed(1)} G</dd></div><div><dt>Steering</dt><dd>${Math.round(T.steer*100)}%</dd></div></dl>`);
+  put('pwTyres',`<div class="pit-panel-heading"><h2>Tyres &amp; brakes</h2><span>Core · wear · pressure</span></div>
+    <div class="pit-tyre-grid">${['fl','fr','rl','rr'].map(k=>pwTyre(C,k)).join('')}</div>`);
+  const latest=C.recentLaps.slice(-3).reverse();
+  put('pwLaps',`<div class="pit-panel-heading"><h2>Recent laps</h2><span>${C.laps} logged</span></div>
+    ${latest.length?`<ol>${latest.map(l=>`<li><span>L${l.lapNumber}${l.isValid?'':' · invalid'}</span><strong>${esc(l.lapTimeFormatted)}</strong></li>`).join('')}</ol>`:'<p>First completed lap will appear here.</p>'}`);
 }
 
 function setupText(E){
@@ -850,6 +1096,7 @@ document.addEventListener('click',async ev=>{
   else if(t.dataset.eng)pickDriver(t.dataset.eng);
   else if(t.dataset.fb){const id=t.dataset.fb;setFb(engFb.includes(id)?engFb.filter(x=>x!==id):[...engFb,id]);}
   else if(t.dataset.retab){engTab=t.dataset.retab;renderEngineer();}
+  else if(t.dataset.engpane){engPane=t.dataset.engpane;try{localStorage.setItem('pw.engPane',engPane);}catch(e){}renderEngineer();}
   else if(t.dataset.act==='radio')radio();
   else if(t.dataset.act==='copySetup'&&S&&S.engineer&&S.engineer.analysis){
     if(await copyText(setupText(S.engineer))){copiedUntil=Date.now()+2000;renderEngineer();setTimeout(renderEngineer,2050);}else toast('Could not copy on this browser');}

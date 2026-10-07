@@ -5,7 +5,7 @@
   the next two races, i.e. while that race is one of the last two finished.
 - Days since the last Maldonado: a human's solo crash (heavy wing damage with no other car involved).
 - Simply lovely: a Red Bull human on pole, or winning the race.
-- We are checking: once every 3 races a Ferrari human in the pit lane gets 10 s of "We are checking".
+- We are checking: once every 2 races a Ferrari human in the pit lane gets 10 s of "We are checking".
 - Hammer Time: the serious switch. While it is on none of the above is shown (points stay).
 
 A "competitive" race has a final classification, at least two human drivers who finished it (an abandoned
@@ -26,7 +26,7 @@ from .summary import _best_valid
 POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
 COMPETITIVE_KM = 60
 TAG_RACES = 2
-CHECKING_EVERY = 3            # races
+CHECKING_EVERY = 2            # races
 CHECKING_SECONDS = 10.0
 LAWNMOWER_OFFS = 15           # all four wheels off more than this many times in a race
 PHOTO_FINISH_S = 0.1

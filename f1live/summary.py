@@ -52,12 +52,19 @@ def _punctures(st: dict) -> list[str]:
     return [w for w, d in zip(("RL", "RR", "FL", "FR"), dmg) if d >= PUNCTURE_DAMAGE] if len(dmg) == 4 else []
 
 
+def _timing_best(c: Car) -> float | None:
+    """Fastest lap as the game's timing shows it: the standing-start lap counts too (the analysis leaves it
+    out, but on the pit wall the column would otherwise stay empty until lap 2 is done)."""
+    ts = [l["time"] for l in c.laps if l["time"] > 0 and l.get("timed", True)]
+    return min(ts) if ts else None
+
+
 def human_live(s: Session, c: Car, gaps: dict, fastest: float | None) -> dict:
     """What only the telemetry knows: tyre wear, fuel mix, ERS, track limits. Sent twice a second."""
     st, t = c.status, c.tel
     wear = st.get("tyresWear") or []
     last = c.laps[-1] if c.laps else None
-    best = c.best_lap()
+    best = _timing_best(c)
     best_lap = next((l["lap"] for l in c.laps if l["time"] == best), None) if best else None
     tyre = L.tyre_label(st.get("actualTyreCompound"), st.get("visualTyreCompound"))
     g = gaps.get(c.idx, {})
@@ -83,6 +90,23 @@ def human_live(s: Session, c: Car, gaps: dict, fastest: float | None) -> dict:
         "speed": t.get("speed"), "pit": c.lap.get("pitStatus", 0),
         "top_speed": c.top_speed or None, "puncture": _punctures(st),
     }
+
+
+def human_intervals(s: Session) -> dict[int, dict]:
+    """Each human driver's gap to the next human ahead on the road, ignoring the AI cars in between:
+    seconds since that driver passed the same point, or whole laps when they are a lap or more ahead."""
+    order = sorted([c for c in s.cars if c.active and c.human and c.position], key=lambda c: c.position)
+    out: dict[int, dict] = {}
+    for ahead, c in zip(order, order[1:]):
+        td = c.lap.get("totalDistance", 0.0)
+        d = {"to": s.display_name(ahead.idx), "s": None, "laps": 0}
+        if s.track_length:
+            d["laps"] = max(0, int((ahead.lap.get("totalDistance", 0.0) - td) // s.track_length))
+        t_me, t_ahead = c.trail_time_at(td), ahead.trail_time_at(td)
+        if t_me is not None and t_ahead is not None:
+            d["s"] = round(t_me - t_ahead, 1)
+        out[c.idx] = d
+    return out
 
 
 def _deploy_pct(s: Session, lap: dict) -> int | None:
@@ -244,7 +268,8 @@ def snapshot(s: Session | None, incidents: list[dict], extra: dict) -> dict:
                      "primary": k == s.primary, "ended": src.ended} for k, src in s.sources.items()],
         "cars": [car_row(s, c, gaps) for c in order],
         "timesheet": timesheet(s) if not s.is_race else [],
-        "live": [human_live(s, c, gaps, min((x.best_lap() or 1e9) for x in active) if active else None) for c in order if c.human],
+        "live": [human_live(s, c, gaps, min((_timing_best(x) or 1e9) for x in active) if active else None) for c in order if c.human],
+        "human_gaps": human_intervals(s) if s.is_race else {},
         "events": [{k: e[k] for k in ("id", "st", "clock", "lap", "kind", "severity", "cars", "names", "humans",
                                       "corner", "text", "incident")} for e in events[-150:]],
         "incidents": incidents[-100:],

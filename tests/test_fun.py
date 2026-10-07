@@ -113,7 +113,7 @@ class _Session:
         return f"car{i}"
 
 
-def test_we_are_checking_once_every_three_races():
+def test_we_are_checking_once_every_two_races():
     base = tempfile.mkdtemp()
     fun = F.Fun(base)
     s = _Session([_Car(0, True, "Ferrari"), _Car(1, True, "Red Bull")])
@@ -128,13 +128,13 @@ def test_we_are_checking_once_every_three_races():
     assert fun.state["checking_races_left"] == F.CHECKING_EVERY
     fun.tick(s)                                   # same race: doesn't fire again or count again
     assert fun.checking is None and fun.state["checking_races_left"] == F.CHECKING_EVERY
-    for n in range(1, F.CHECKING_EVERY):          # the next two races count down without firing
+    for n in range(1, F.CHECKING_EVERY):          # the races in between count down without firing
         s.uid += 1
         fun.tick(s)
         assert fun.checking is None, n
     s.uid += 1
     fun.tick(s)
-    assert fun.checking is not None               # the third race fires again
+    assert fun.checking is not None               # and the next one fires again
 
 
 def test_simply_lovely_for_a_red_bull_pole_or_win():

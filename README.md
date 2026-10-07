@@ -3,10 +3,12 @@
 A live pit wall for F1 2020 online lobbies. Every driver's game sends its telemetry to one computer, and
 everyone opens the dashboard in a browser:
 
-- **Pit wall**: each human driver's tyres and wear, lap times, top speed, wing damage, fuel, ERS and track
-  limits, live race control with incidents, everyone's setups side by side, and season points.
+- **Pit wall**: each human driver's gap to the human ahead, tyres and wear, lap times, top speed, wing
+  damage, fuel, ERS and track limits, live race control with incidents, everyone's setups side by side, and
+  season points.
 - **Engineer**: setup advice for one driver from their own car's telemetry and how the car feels to
-  them, on one screen. Built on Vinamra's F1 2020 AI Race Engineer.
+  them, on one screen. Built on Vinamra's F1 2020 AI Race Engineer. **My telemetry** shows that driver's
+  live car on one screen: speed, throttle and brake on a dial, tyres, brakes, ERS, fuel and recent laps.
 - **Sessions**: a summary of every practice, qualifying and race, and the raw recording of the last race.
 
 Plus a few lobby jokes. **Hammer Time** turns them off when things get serious.
@@ -17,7 +19,7 @@ Plus a few lobby jokes. **Hammer Time** turns them off when things get serious.
 
 | | |
 |---|---|
-| ![Dark mode](UI/1.1/screenshots/pitwall_race_dark.png) | ![Setup sheet](UI/1.1/screenshots/engineer_setup_sheet.png) |
+| ![Dark mode](UI/1.1/screenshots/pitwall_race_dark.png) | ![My telemetry](UI/1.1/screenshots/my_telemetry.png) |
 | ![We are checking](UI/1.1/screenshots/pitwall_we_are_checking.png) | ![Simply lovely](UI/1.1/screenshots/simply_lovely.png) |
 
 ## How to use it
@@ -35,7 +37,8 @@ Plus a few lobby jokes. **Hammer Time** turns them off when things get serious.
    Format **2020**, Your Telemetry **Public**.
 
 3. **Practice**: open the **Engineer** tab and pick your name. Tick what the car feels like, apply the
-   suggested changes, and use **Copy Full Setup** for the garage.
+   suggested changes, and use **Copy Full Setup** for the garage. Switch to **My telemetry** to watch
+   your own car.
 
 4. **Qualifying and race**: watch the **Pit wall**. Press **F** (or *Flag incident*) to mark a moment
    for the race report.
