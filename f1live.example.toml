@@ -25,12 +25,10 @@ delete_incidents = true   # also delete earlier sessions' incident packages (kep
 end_timeout_seconds = 90  # a session is finalised after this long without packets
 
 [incidents]
-pre_seconds = 20          # data kept from before the trigger
-post_seconds = 10         # and after it
-max_seconds = 90          # cap when several triggers merge into one incident
+merge_seconds = 12        # events this close together (session time) involving the same cars are one incident
 capture = ["collision", "spin", "damage", "penalty", "retirement", "manual"]
-include_ai_only = false   # also save incidents that involve no human driver
-sessions = ["race"]       # session kinds that save incident packages (practice & qualifying: summaries only)
+include_ai_only = false   # also list incidents that involve no human driver
+sessions = ["race"]       # session kinds that list incidents
 
 [engineer]
 # Race engineer detectors, counted on every packet from each driver's own game. All but the kerb

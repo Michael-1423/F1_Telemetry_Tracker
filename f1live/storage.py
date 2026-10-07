@@ -144,7 +144,7 @@ class SessionStore:
         name = f"{stamp}_{_slug(track)}_{_slug(session_type)}_{uid & 0xFFFFFF:06x}"
         path = os.path.join(self.base, name)
         with self._lock:
-            os.makedirs(os.path.join(path, "incidents"), exist_ok=True)
+            os.makedirs(path, exist_ok=True)
         return path
 
     def list(self) -> list[dict]:
@@ -160,15 +160,15 @@ class SessionStore:
             except (OSError, ValueError):
                 continue
             raw = os.path.join(path, RAW_NAME)
+            inc_dir = os.path.join(path, "incidents")   # incident packages of sessions recorded before 1.1
             meta.update({
                 "id": name,
                 "raw_bytes": os.path.getsize(raw) if os.path.exists(raw) else 0,
                 "keep_raw": os.path.exists(os.path.join(path, KEEP_MARKER)),
                 "total_bytes": dir_size(path),
-                "incidents": len([d for d in os.listdir(os.path.join(path, "incidents"))
-                                  if os.path.isdir(os.path.join(path, "incidents", d))])
-                if os.path.isdir(os.path.join(path, "incidents")) else 0,
-                "incident_bytes": dir_size(os.path.join(path, "incidents")),
+                "incidents": len([d for d in os.listdir(inc_dir) if os.path.isdir(os.path.join(inc_dir, d))])
+                if os.path.isdir(inc_dir) else meta.get("incidents", 0),
+                "incident_bytes": dir_size(inc_dir),
                 "has_summary": os.path.exists(os.path.join(path, "summary.json")),
             })
             out.append(meta)

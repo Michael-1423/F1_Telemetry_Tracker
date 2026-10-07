@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gzip
 import ipaddress
 import json
 import os
@@ -86,18 +85,6 @@ def make_handler(pipe: Pipeline, cfg: dict):
                     return self._file(os.path.join(sp, "summary.json"), "application/json")
                 if len(parts) == 4 and parts[3] == "summary.md":
                     return self._file(os.path.join(sp, "summary.md"), "text/markdown; charset=utf-8")
-                if len(parts) == 4 and parts[3] == "incidents":
-                    return self._json({"incidents": list_incidents(sp)})
-                if len(parts) == 6 and parts[3] == "incidents" and SAFE.match(parts[4]):
-                    folder = os.path.join(sp, "incidents", parts[4])
-                    if parts[5] == "prompt.md":
-                        return self._file(os.path.join(folder, "prompt.md"), "text/markdown; charset=utf-8")
-                    if parts[5] == "incident.json":
-                        gz = os.path.join(folder, "incident.json.gz")
-                        if os.path.isfile(gz):
-                            with gzip.open(gz, "rb") as f:
-                                return self._send(200, f.read(), "application/json")
-                        return self._json({"error": "not found"}, 404)
             return self._json({"error": "not found"}, 404)
 
         def _can_control(self) -> bool:
@@ -148,6 +135,9 @@ def make_handler(pipe: Pipeline, cfg: dict):
                     return self._json({"error": "unknown session"}, 404)
                 pipe.commands.put(("keep", {"session": sid, "keep": bool(body.get("keep", True))}))
                 return self._json({"ok": True})
+            if path == "/api/hammer":
+                pipe.commands.put(("hammer", bool(body.get("on", True))))
+                return self._json({"ok": True})
             if path == "/api/keep-current":
                 pipe.commands.put(("keep_current", bool(body.get("keep", True))))
                 return self._json({"ok": True})
@@ -176,24 +166,6 @@ def _engineer_args(query: dict) -> tuple[str, list[str]] | None:
 
 def _engineer_json(inputs: dict, name: str, feedback: list[str]) -> bytes:
     return json.dumps(ENG.payload(inputs.get(name.lower()), name, feedback), separators=(",", ":")).encode()
-
-
-def list_incidents(session_path: str) -> list[dict]:
-    base = os.path.join(session_path, "incidents")
-    out = []
-    if not os.path.isdir(base):
-        return out
-    for name in sorted(os.listdir(base)):
-        meta = os.path.join(base, name, "meta.json")
-        if os.path.isfile(meta):
-            try:
-                with open(meta, encoding="utf-8") as f:
-                    m = json.load(f)
-                m["folder"] = name
-                out.append(m)
-            except (OSError, ValueError):
-                pass
-    return out
 
 
 class QuietServer(ThreadingHTTPServer):

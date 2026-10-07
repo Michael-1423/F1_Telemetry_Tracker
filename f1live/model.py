@@ -120,15 +120,13 @@ class Car:
         self.penalty_s = 0
         self.warnings = 0
         self.speed_trap = 0.0
+        self.top_speed = 0                          # km/h, highest on track (pit lane excluded) this session
         self.result = None
         self.finish_st: float | None = None
-        self.hist: deque = deque(maxlen=4000)      # 1 Hz: (st, totalDist, pos, lap, fiaFlag, pit)
         self.trail: list[float] = []                # session time at each 10 m of total distance
         self.cur_trace: dict[int, tuple] = {}       # 5 m bin -> (speed, thr, brk, steer, gear)
-        self.prev_trace: dict[int, tuple] = {}
         self.cur_onsets: list[tuple[float, int]] = []   # (lap distance, speed) where brake crossed 50%
         self.lap_traces: dict[int, tuple] = {}      # humans: lap -> (trace, onsets), for re-analysis
-        self.cur_line: dict[int, tuple] = {}        # 5 m bin -> (x, z)
         self.tl_count = 0                           # all four wheels off the white lines
         self.tl_where: Counter = Counter()
         self.cur_tl = 0
@@ -176,7 +174,6 @@ class Car:
         self._last_spin_end = -1e9
         self._spin_on = False
         self._prev_steer: float | None = None
-        self._last_hist = -1e9
         self._prev_lap: dict = {}
         self._prev_status: dict = {}
 
@@ -250,8 +247,6 @@ class Session:
         self._auth_t = -1e9
         self.primary: str | None = None
         self.last_positions: dict[str, tuple[float, list]] = {}
-        self.ref_line: dict[int, tuple] = {}
-        self.ref_line_time = 1e9
         self.zones: list[dict] = []
         self.zones_auto = False
         self.ref_trace: dict[int, tuple] = {}
@@ -679,10 +674,6 @@ class Session:
                 c.finish_st = st
                 self.emit("finish", "info", [c.idx], f"Finished P{ld['carPosition']}", st=st, wall=wall)
         self._trail(c, ld, st)
-        if st - c._last_hist >= 1.0:
-            c._last_hist = st
-            c.hist.append((round(st, 1), round(ld["totalDistance"], 1), ld["carPosition"], lapn,
-                           c.status.get("vehicleFiaFlags", 0), ld.get("pitStatus", 0)))
 
     def _trail(self, c: Car, ld: dict, st: float) -> None:
         td = ld.get("totalDistance", 0.0)
@@ -776,16 +767,12 @@ class Session:
             c.lap_traces[lap["lap"]] = (c.cur_trace, c.cur_onsets)
         if lap["clean"]:
             c.style.update(c.cur_style)
-            if lt < self.ref_line_time and len(c.cur_line) > 50:
-                self.ref_line_time = lt
-                self.ref_line = dict(c.cur_line)
             if lt < self.ref_trace_time and len(c.cur_trace) > 200:
                 self.ref_trace_time = lt
                 self.ref_trace = dict(c.cur_trace)
                 if not self.zones and self.track_length:
                     self._auto_zones()
-        c.prev_trace = c.cur_trace
-        c.cur_trace, c.cur_line, c.cur_onsets = {}, {}, []
+        c.cur_trace, c.cur_onsets = {}, []
         c.cur_tl = 0
         c.cur_deploy_bins = set()
         c.ers_lap_deploy = c.ers_lap_harvest = 0.0
@@ -805,7 +792,7 @@ class Session:
 
     def _abandon_lap(self, c: Car) -> None:
         """The driver returned to the garage mid-lap: drop what was collected for this lap."""
-        c.cur_trace, c.cur_line, c.cur_onsets = {}, {}, []
+        c.cur_trace, c.cur_onsets = {}, []
         c.cur_tl = 0
         c.cur_deploy_bins = set()
         c.ers_lap_deploy = c.ers_lap_harvest = 0.0
@@ -937,6 +924,8 @@ class Session:
         lapd = ld.get("lapDistance", -1.0)
         speed = td["speed"]
         in_pit = bool(ld.get("pitStatus"))
+        if not in_pit and speed > c.top_speed:
+            c.top_speed = speed
         # ---- off-track excursions
         off = sum(1 for s in td["surfaceType"] if s in L.OFF_SURFACES)
         need = self.det["offtrack_min_wheels"]
@@ -1129,8 +1118,6 @@ class Session:
         in_pit = bool(ld.get("pitStatus"))
         vx, vz = m["worldVelocityX"], m["worldVelocityZ"]
         v_kmh = math.hypot(vx, vz) * 3.6
-        if lapd >= 0:
-            c.cur_line[int(lapd // 5)] = (round(m["worldPositionX"], 2), round(m["worldPositionZ"], 2))
         slip = 0.0
         if v_kmh > 5:
             ang = math.atan2(vx, vz) - m["yaw"]
@@ -1264,7 +1251,7 @@ class Session:
         return LP.profile(c.laps, self.zones)
 
     def corner_stats(self, c: Car) -> dict:
-        """Per-corner averages keyed by corner name (used by incident prompts)."""
+        """Per-corner averages keyed by corner name (in the summary)."""
         return {r["corner"]: {"min_speed": r["min_v"], "brake_at": r["brake_at"], "brake_range": r["brake_range"],
                               "laps": r["laps"], "entry_v": r["entry_v"]} for r in self.corner_profile(c)}
 

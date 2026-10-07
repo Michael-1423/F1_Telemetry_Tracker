@@ -43,6 +43,15 @@ def car_row(s: Session, c: Car, gaps: dict) -> dict:
     }
 
 
+PUNCTURE_DAMAGE = 95   # tyresDamage tracks wear; a puncture jumps it to 100 (Aven, Silverstone 2026-10-07)
+
+
+def _punctures(st: dict) -> list[str]:
+    dmg = st.get("tyresDamage") or []
+    # wheel order in the game is RL, RR, FL, FR
+    return [w for w, d in zip(("RL", "RR", "FL", "FR"), dmg) if d >= PUNCTURE_DAMAGE] if len(dmg) == 4 else []
+
+
 def human_live(s: Session, c: Car, gaps: dict, fastest: float | None) -> dict:
     """What only the telemetry knows: tyre wear, fuel mix, ERS, track limits. Sent twice a second."""
     st, t = c.status, c.tel
@@ -72,6 +81,7 @@ def human_live(s: Session, c: Car, gaps: dict, fastest: float | None) -> dict:
         "penalties": c.lap.get("penalties", 0), "warnings": c.warnings, "dmg": _dmg(c),
         "invalid": bool(c.lap.get("currentLapInvalid")), "now": c.lap.get("currentLapTime"),
         "speed": t.get("speed"), "pit": c.lap.get("pitStatus", 0),
+        "top_speed": c.top_speed or None, "puncture": _punctures(st),
     }
 
 
@@ -386,7 +396,7 @@ def summary_markdown(sm: dict) -> str:
             for m in d["mistakes"]:
                 w(f"| {m['clock'] or '-'} | {m['lap']} | {m['severity']} | {m['text']}{' · incident ' + m['incident'] if m.get('incident') else ''} |")
     if sm["incidents"]:
-        w("\n## Saved incidents\n")
+        w("\n## Incidents\n")
         for i in sm["incidents"]:
-            w(f"- {i['id']} · lap {i.get('lap')} · {i['title']} ({i['status']})")
+            w(f"- {i['id']} · lap {i.get('lap')} · {i.get('clock') or ''} · {i['title']}")
     return "\n".join(out) + "\n"
