@@ -27,7 +27,9 @@ the race happens, saves an incident package around every collision, and writes a
   detects oversteer, understeer, front locking and kerb strikes from their telemetry, takes how the car
   feels to them (tick boxes such as *Oversteer on corner exit*), and suggests setup clicks with the
   reasons, plus a full setup sheet to copy and a run / pit / tyre / fuel call for the session. This is the
-  F1 2020 AI Race Engineer's logic, ported unchanged (see below).
+  F1 2020 AI Race Engineer's logic, ported unchanged (see below). *Compact* shows the engineer's call, live
+  car data, tyres and recent laps on one screen, as in the original's compact pit wall; *Detailed* adds the
+  handling boxes, every suggested change and the setup sheet.
 - **Corners cut vs running wide**: every excursion with 2+ wheels beyond the kerbs is classed by which side
   of the car left the track first compared with the way the driver is steering: inside wheels = a cut,
   outside wheels = running wide. Useful when the game's corner cutting is set to lenient.
@@ -66,8 +68,9 @@ No dependencies beyond Python 3.11+.
    who don't stream are still tracked through the other players' games, at lower resolution.
 
 3. **Practice:** each driver opens `http://<recording computer>:8020/#engineer`, picks their name and keeps
-   that page open (the link becomes `.../#engineer/<name>`, so it can be bookmarked). Work through the
-   setup changes, tick what the car feels like, and use **Copy setup** for the garage. **Qualifying and
+   that page open (the link becomes `.../#engineer/<name>`, so it can be bookmarked). *Compact* fits one
+   screen next to the game; switch to *Detailed* to tick what the car feels like, see every setup change
+   and use **Copy setup** for the garage. The page remembers the choice. **Qualifying and
    race:** everyone watches the *Pit wall* tab.
 
 4. Race. Press **F** (or the Flag incident button) to save the last 20 s and next 10 s by hand.
@@ -102,9 +105,13 @@ of its relay's detectors (`relay/f1_relay.py`) and its setup engine (`src/lib/en
   and waits for the setup to arrive before advising.
 - The handling boxes a driver ticks stay in that browser, per driver and track, like in the original
   app. Two people can look at the same driver with different boxes ticked.
-- The counters are per telemetry packet, as in the original. Oversteer and understeer restart each lap;
-  kerb strikes count over the current or last lap (whichever is higher); front locking adds up over the
-  session.
+- The counters are per telemetry packet, as in the original. Oversteer and understeer count over the
+  current lap plus the last three completed laps, invalid laps included (an invalid lap's times don't count,
+  but how the car behaved does); kerb strikes count over the current or last lap (whichever is higher);
+  front locking adds up over the session.
+- A setup change starts the evidence again: laps driven on the old setup no longer count, so the engine
+  doesn't ask for a change that has just been made. The original sums oversteer and understeer over every
+  lap of the session, old setups included.
 - Kerb strikes are sharp suspension movements, faster than 1000 mm/s. The original counted suspension
   *position* above 0.08 over the whole session; F1 2020 reports position in millimetres, so every sample
   counted and every car was diagnosed as bottoming on kerbs. Position can't tell kerbs apart anyway (aero
@@ -113,6 +120,9 @@ of its relay's detectors (`relay/f1_relay.py`) and its setup engine (`src/lib/en
 - Other differences from the original relay, both in what it read from the game: a lap's validity is the
   game's flag for that lap (the relay's parser was laid out for F1 2021 and read the wrong byte), and the
   all-zero setup the game sends after a car retires or finishes is ignored.
+- When the tracker starts, or a driver's game connects, partway through a lap, that lap isn't logged. The
+  relay logged a lap "1" with the previous lap's time, then a first lap with half a lap of evidence and the
+  whole stint's tyre wear as one lap's wear.
 - The detector thresholds can be changed under `[engineer]` in the config.
 
 `GET /api/engineer?driver=<name>&fb=oversteer_exit,front_locking` returns one driver's analysis as JSON.

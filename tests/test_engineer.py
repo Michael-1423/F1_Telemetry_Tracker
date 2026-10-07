@@ -115,6 +115,44 @@ def test_detector_counts():
     assert f.snapshot("x", {})["diagnostics"]["frontLockingEvents"] == 1
 
 
+def test_joining_mid_session_logs_no_partial_lap():
+    f = E.EngineerFeed()
+    s = blank(P.STATUS)
+    s["carStatusData"][0].update(fuelInTank=20.0, tyresWear=[10, 10, 10, 10])
+    f.feed(s, 0)
+    lap = blank(P.LAP)
+    ld = lap["lapData"][0]
+    # The tracker starts while the driver is 30 s into lap 12
+    ld.update(currentLapNum=12, currentLapTime=30.0, lastLapTime=95.5)
+    f.feed(lap, 0)
+    f.feed(motion((0.30, 0.10, 0.10, 0.05)), 0)  # oversteer on the partial lap
+    ld.update(currentLapNum=13, currentLapTime=0.1, lastLapTime=96.0)
+    f.feed(lap, 0)
+    snap = f.snapshot("x", {})
+    assert snap["completedLaps"] == [] and snap["diagnostics"]["oversteerEvents"] == 0
+
+    # Lap 13 is seen from the line, so it is logged, with this lap's wear and fuel only
+    s["carStatusData"][0].update(fuelInTank=18.5, tyresWear=[12, 12, 13, 13])
+    f.feed(s, 0)
+    ld.update(currentLapNum=14, currentLapTime=0.1, lastLapTime=95.0)
+    f.feed(lap, 0)
+    (l13,) = f.snapshot("x", {})["completedLaps"]
+    assert l13["lapNumber"] == 13 and l13["lapTime"] == 95.0
+    assert l13["fuelUsedKg"] == 1.5
+    assert l13["tyreWearDelta"] == {"fl": 3.0, "fr": 3.0, "rl": 2.0, "rr": 2.0}, l13
+
+
+def test_starting_from_the_garage_logs_the_first_lap():
+    f = E.EngineerFeed()
+    lap = blank(P.LAP)
+    ld = lap["lapData"][0]
+    ld.update(currentLapNum=1, currentLapTime=0.0)
+    f.feed(lap, 0)
+    ld.update(currentLapNum=2, currentLapTime=0.1, lastLapTime=110.0)
+    f.feed(lap, 0)
+    assert [l["lapNumber"] for l in f.snapshot("x", {})["completedLaps"]] == [1]
+
+
 def test_lap_records_and_resets():
     f = E.EngineerFeed()
     s = blank(P.STATUS)
@@ -445,6 +483,39 @@ def test_invalid_lap_behaviour_influences_setup_recommendation():
 
     result = E.analyze(snapshot)
 
+    assert any(
+        rec["parameter"] == "onThrottleDiff" for rec in result["recommendations"]
+    )
+
+
+def test_laps_before_a_setup_change_do_not_count():
+    with open(GOLDEN, encoding="utf-8") as f:
+        snapshot = json.load(f)["cases"][0]["snapshot"]
+
+    snapshot["telemetry"]["tyresInnerTemperature"] = {
+        "fl": 100,
+        "fr": 100,
+        "rl": 100,
+        "rr": 100,
+    }
+    snapshot["diagnostics"]["oversteerEvents"] = 0
+    snapshot["diagnostics"]["understeerEvents"] = 0
+    snapshot["diagnostics"]["kerbBottomingEvents"] = 0
+    # An oversteery lap 1, then the driver changed the setup during lap 2
+    snapshot["completedLaps"] = [
+        {"lapNumber": 1, "isValid": False, "oversteerEvents": 10, "understeerEvents": 0},
+    ]
+    snapshot["setupChangedLap"] = 2
+
+    result = E.analyze(snapshot)
+
+    assert not any(
+        rec["parameter"] == "onThrottleDiff" for rec in result["recommendations"]
+    )
+
+    # The same lap on the new setup still counts
+    snapshot["completedLaps"][0]["lapNumber"] = 2
+    result = E.analyze(snapshot)
     assert any(
         rec["parameter"] == "onThrottleDiff" for rec in result["recommendations"]
     )
