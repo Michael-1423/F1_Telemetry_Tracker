@@ -39,6 +39,8 @@ from typing import Any
 from . import lookups as L
 from . import packets as P
 
+from .setup_engine import analyze
+
 # Detector thresholds. All but kerb_suspension_velocity are as hard-coded in relay/f1_relay.py.
 DEFAULTS: dict[str, float] = {
     # rear wheel slip above this and slip_ratio x the front -> oversteer sample
@@ -50,12 +52,21 @@ DEFAULTS: dict[str, float] = {
     # any |suspension velocity| above this (mm/s) -> kerb strike sample. Singapore 2026-09-30, >3 per lap:
     # 7/13 laps on the stiffest setup (rear springs 11), 1/13 on the softest (rear springs 1).
     "kerb_suspension_velocity": 1000.0,
+
     "lock_brake": 0.7,  # brake pedal above this...
     # ...with front brakes this much hotter than the rears -> front locking sample
-    "lock_brake_temp_gap": 120.0,
+    # "lock_brake_temp_gap": 120.0,
+
+    "cornering_steer": 0.08,  # |steer| above this = cornering sample
+    "entry_brake": 0.05,  # brake above this while cornering = entry
+    "exit_throttle": 0.5,  # throttle above this while cornering (no brake) = exit; otherwise mid
+    "lock_slip": 0.25,  # braking with one axle's slip above this and slip_ratio x the other = lockup sample
 }
 
 FEED_PACKETS = {P.MOTION, P.LAP, P.TELEMETRY, P.STATUS, P.SETUPS}
+
+
+PHASES = ("entry", "mid", "exit")
 
 # Names as the relay's packet_parser.py produced them (they appear in the briefing text).
 SESSION_TYPES = {
@@ -238,10 +249,16 @@ class EngineerFeed:
             "rr": 0,
         }  # the relay kept every sample; sums give the same mean
         self._temp_n = 0
-        self.oversteer_events = 0
-        self.understeer_events = 0
-        self.front_locking_events = 0
-        self.rear_locking_events = 0
+        # self.oversteer_events = 0
+        # self.understeer_events = 0
+        # self.front_locking_events = 0
+        # self.rear_locking_events = 0
+        self.os_by_phase = dict.fromkeys(PHASES, 0)
+        self.us_by_phase = dict.fromkeys(PHASES, 0)
+        self.phase_samples = dict.fromkeys(PHASES, 0)
+        self.front_lock_lap = 0
+        self.rear_lock_lap = 0
+        self.setup_version = 0
         self.kerb_bottoming_events = 0  # this lap
         self.kerb_last_lap = 0  # the last completed lap
         self.setup_changed_lap: int | None = (
@@ -249,6 +266,20 @@ class EngineerFeed:
         )
         self._lap_seen = False  # had a lap packet from this game yet
         self._partial_lap = False  # joined mid-lap: the lap in progress isn't logged
+
+    @property
+    def oversteer_events(self) -> int:
+        return sum(self.os_by_phase.values())
+
+    @property
+    def understeer_events(self) -> int:
+        return sum(self.us_by_phase.values())
+
+    def _reset_phase_counters(self):
+        for d in (self.os_by_phase, self.us_by_phase, self.phase_samples):
+            for k in d:
+                d[k] = 0
+        self.front_lock_lap = self.rear_lock_lap = 0
 
     def feed(self, pkt: dict, idx: int) -> None:
         """One decoded packet from this driver's own game; idx is their car (the header's playerCarIndex)."""
@@ -265,40 +296,76 @@ class EngineerFeed:
         elif pid == P.SETUPS:
             self.on_setup(pkt["carSetups"][idx])
 
+    # def on_motion(self, cm: dict, extra: dict) -> None:
+    #     m = {
+    #         "gForceLateral": round(cm["gForceLateral"], 2),
+    #         "gForceLongitudinal": round(cm["gForceLongitudinal"], 2),
+    #         # [RL, RR, FL, FR]
+    #         "wheelSlip": [round(x, 4) for x in extra["wheelSlip"]],
+    #         "suspensionPosition": [round(x, 4) for x in extra["suspensionPosition"]],
+    #         "suspensionVelocity": [round(x, 4) for x in extra["suspensionVelocity"]],
+    #     }
+    #     self.motion.update(m)
+    #     th = self.th
+    #     # Oversteer: significant rear wheel slip; understeer: front slip with high lateral g
+    #     slips = m["wheelSlip"]
+    #     if len(slips) >= 4:
+    #         rear_slip = max(slips[0], slips[1])
+    #         front_slip = max(slips[2], slips[3])
+    #         lat_g = abs(m["gForceLateral"])
+    #         if (
+    #             rear_slip > th["oversteer_slip"]
+    #             and rear_slip > front_slip * th["slip_ratio"]
+    #         ):
+    #             self.oversteer_events += 1
+    #         elif (
+    #             front_slip > th["understeer_slip"]
+    #             and front_slip > rear_slip * th["slip_ratio"]
+    #             and lat_g > th["understeer_lat_g"]
+    #         ):
+    #             self.understeer_events += 1
+    #     # Kerb strikes: a wheel punched up or dropped sharply
+    #     if any(
+    #         abs(v) > th["kerb_suspension_velocity"] for v in m["suspensionVelocity"]
+    #     ):
+    #         self.kerb_bottoming_events += 1
     def on_motion(self, cm: dict, extra: dict) -> None:
         m = {
             "gForceLateral": round(cm["gForceLateral"], 2),
             "gForceLongitudinal": round(cm["gForceLongitudinal"], 2),
-            # [RL, RR, FL, FR]
-            "wheelSlip": [round(x, 4) for x in extra["wheelSlip"]],
+            "wheelSlip": [round(x, 4) for x in extra["wheelSlip"]],  # [RL, RR, FL, FR]
             "suspensionPosition": [round(x, 4) for x in extra["suspensionPosition"]],
             "suspensionVelocity": [round(x, 4) for x in extra["suspensionVelocity"]],
         }
         self.motion.update(m)
         th = self.th
-        # Oversteer: significant rear wheel slip; understeer: front slip with high lateral g
         slips = m["wheelSlip"]
         if len(slips) >= 4:
             rear_slip = max(slips[0], slips[1])
             front_slip = max(slips[2], slips[3])
             lat_g = abs(m["gForceLateral"])
-            if (
-                rear_slip > th["oversteer_slip"]
-                and rear_slip > front_slip * th["slip_ratio"]
-            ):
-                self.oversteer_events += 1
-            elif (
-                front_slip > th["understeer_slip"]
-                and front_slip > rear_slip * th["slip_ratio"]
-                and lat_g > th["understeer_lat_g"]
-            ):
-                self.understeer_events += 1
-        # Kerb strikes: a wheel punched up or dropped sharply
-        if any(
-            abs(v) > th["kerb_suspension_velocity"] for v in m["suspensionVelocity"]
-        ):
-            self.kerb_bottoming_events += 1
-
+            t = self.telemetry  # latest car telemetry packet: pedals and steering at this instant
+            brake, throttle, steer = t["brake"], t["throttle"], abs(t["steer"])
+    
+            if steer > th["cornering_steer"]:
+                # Which part of the corner are we in? Braking = entry, on the power = exit, else mid.
+                phase = ("entry" if brake > th["entry_brake"]
+                        else "exit" if throttle > th["exit_throttle"] else "mid")
+                self.phase_samples[phase] += 1
+                if rear_slip > th["oversteer_slip"] and rear_slip > front_slip * th["slip_ratio"]:
+                    self.os_by_phase[phase] += 1
+                elif (front_slip > th["understeer_slip"] and front_slip > rear_slip * th["slip_ratio"]
+                    and lat_g > th["understeer_lat_g"]):
+                    self.us_by_phase[phase] += 1
+    
+            if brake > th["lock_brake"]:  # hard braking: whichever axle is sliding much more than the other
+                if front_slip > th["lock_slip"] and front_slip > rear_slip * th["slip_ratio"]:
+                    self.front_lock_lap += 1
+                elif rear_slip > th["lock_slip"] and rear_slip > front_slip * th["slip_ratio"]:
+                    self.rear_lock_lap += 1
+    
+        if any(abs(v) > th["kerb_suspension_velocity"] for v in m["suspensionVelocity"]):
+            self.kerb_bottoming_events += 1  # unchanged
     def on_telemetry(self, td: dict) -> None:
         t = {
             "speed": td["speed"],
@@ -322,12 +389,12 @@ class EngineerFeed:
             self._temp_sum[k] += v
         self._temp_n += 1
         # Brake lockups: heavy braking with the fronts much hotter than the rears
-        if t["brake"] > self.th["lock_brake"]:
-            b = t["brakesTemperature"]
-            b_front_avg = (b["fl"] + b["fr"]) / 2
-            b_rear_avg = (b["rl"] + b["rr"]) / 2
-            if b_front_avg > b_rear_avg + self.th["lock_brake_temp_gap"]:
-                self.front_locking_events += 1
+        # if t["brake"] > self.th["lock_brake"]:
+        #     b = t["brakesTemperature"]
+        #     b_front_avg = (b["fl"] + b["fr"]) / 2
+        #     b_rear_avg = (b["rl"] + b["rr"]) / 2
+        #     if b_front_avg > b_rear_avg + self.th["lock_brake_temp_gap"]:
+        #         self.front_locking_events += 1
 
     def on_lap_data(self, ld: dict) -> None:
         lap = {
@@ -369,8 +436,11 @@ class EngineerFeed:
         self._temp_sum = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
         self._temp_n = 0
         self.current_lap_max_speed = 0
-        self.oversteer_events = self.understeer_events = 0
+        # self.oversteer_events = self.understeer_events = 0
+        # self.kerb_last_lap = self.kerb_bottoming_events = 0
+        self._reset_phase_counters()
         self.kerb_last_lap = self.kerb_bottoming_events = 0
+
 
     def on_status(self, cs: dict) -> None:
         self.status.update(
@@ -426,13 +496,20 @@ class EngineerFeed:
             self._restart_evidence()
 
     def _restart_evidence(self) -> None:
-        """The driver changed the setup: what the detectors counted belongs to the old one. Without this the
-        engine keeps diagnosing (say) kerb bottoming from laps on the old setup and asks for the same change
-        again on top of the new values."""
-        self.oversteer_events = self.understeer_events = 0
-        self.front_locking_events = self.rear_locking_events = 0
+        # """The driver changed the setup: what the detectors counted belongs to the old one. Without this the
+        # engine keeps diagnosing (say) kerb bottoming from laps on the old setup and asks for the same change
+        # again on top of the new values."""
+        # self.oversteer_events = self.understeer_events = 0
+        # self.front_locking_events = self.rear_locking_events = 0
+        # self.kerb_bottoming_events = self.kerb_last_lap = 0
+        # self.setup_changed_lap = self.lap_data.get("currentLapNum")
+
+        self._reset_phase_counters()
         self.kerb_bottoming_events = self.kerb_last_lap = 0
         self.setup_changed_lap = self.lap_data.get("currentLapNum")
+        self.setup_version += 1
+
+
 
     def _record_completed_lap(
         self, lap_num: int, lap_time: float, current_lap_packet: dict
@@ -484,14 +561,25 @@ class EngineerFeed:
                 "isValid": not self.lap_data.get(
                     "isCurrentLapInvalid", False
                 ),  # the lap just completed
-                "oversteerEvents": self.oversteer_events,
-                "understeerEvents": self.understeer_events,
+                # "oversteerEvents": self.oversteer_events,
+                # "understeerEvents": self.understeer_events,
+                # "kerbEvents": self.kerb_bottoming_events,
+                "oversteerEvents": sum(self.os_by_phase.values()),
+                "understeerEvents": sum(self.us_by_phase.values()),
+                "oversteerByPhase": dict(self.os_by_phase),
+                "understeerByPhase": dict(self.us_by_phase),
+                "phaseSamples": dict(self.phase_samples),
+                "frontLockEvents": self.front_lock_lap,
+                "rearLockEvents": self.rear_lock_lap,
                 "kerbEvents": self.kerb_bottoming_events,
+
+
             }
         )
         self.current_lap_max_speed = 0
-        self.oversteer_events = 0
-        self.understeer_events = 0
+        # self.oversteer_events = 0
+        # self.understeer_events = 0
+        self._reset_phase_counters()
         self.kerb_last_lap, self.kerb_bottoming_events = self.kerb_bottoming_events, 0
 
     def snapshot(self, driver_name: str, session: dict) -> dict:
@@ -508,11 +596,12 @@ class EngineerFeed:
             "completedLaps": list(self.completed_laps),
             "participants": [],
             "setupChangedLap": self.setup_changed_lap,
+            "setupVersion": self.setup_version,
             "diagnostics": {
                 "oversteerEvents": self.oversteer_events,
                 "understeerEvents": self.understeer_events,
-                "frontLockingEvents": self.front_locking_events,
-                "rearLockingEvents": self.rear_locking_events,
+                "frontLockingEvents": self.front_lock_lap,
+                "rearLockingEvents": self.rear_lock_lap,
                 # a whole lap's worth: the last completed lap, or this one once it has more
                 "kerbBottomingEvents": max(
                     self.kerb_bottoming_events, self.kerb_last_lap
@@ -574,646 +663,646 @@ def _num(x: float) -> str:
     return repr(float(x))
 
 
-# ------------------------------------------------------------------------------------ setup engine
-def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
-    """analyzeTelemetryAndGenerateSetup(snapshot, activeFeedback) from engineer_engine.ts."""
-    fb = list(active_feedback or [])
-    current_setup = dict(snapshot["setup"])
-    target: dict = dict(current_setup)
-    recommendations: list[dict] = []
-    issues: list[dict] = []
+# # ------------------------------------------------------------------------------------ setup engine
+# def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
+#     """analyzeTelemetryAndGenerateSetup(snapshot, activeFeedback) from engineer_engine.ts."""
+#     fb = list(active_feedback or [])
+#     current_setup = dict(snapshot["setup"])
+#     target: dict = dict(current_setup)
+#     recommendations: list[dict] = []
+#     issues: list[dict] = []
 
-    def rec(
-        category, parameter, label, current, recommended, delta, unit, reason, priority
-    ):
-        recommendations.append(
-            {
-                "category": category,
-                "parameter": parameter,
-                "label": label,
-                "currentValue": current,
-                "recommendedValue": recommended,
-                "delta": delta,
-                "unit": unit,
-                "reason": reason,
-                "priority": priority,
-            }
-        )
+#     def rec(
+#         category, parameter, label, current, recommended, delta, unit, reason, priority
+#     ):
+#         recommendations.append(
+#             {
+#                 "category": category,
+#                 "parameter": parameter,
+#                 "label": label,
+#                 "currentValue": current,
+#                 "recommendedValue": recommended,
+#                 "delta": delta,
+#                 "unit": unit,
+#                 "reason": reason,
+#                 "priority": priority,
+#             }
+#         )
 
-    # Telemetry metrics
-    inner = snapshot["telemetry"].get("tyresInnerTemperature") or {
-        "fl": 100,
-        "fr": 100,
-        "rl": 100,
-        "rr": 100,
-    }
-    front_inner_avg = (inner["fl"] + inner["fr"]) / 2
-    rear_inner_avg = (inner["rl"] + inner["rr"]) / 2
-    diag = snapshot.get("diagnostics") or {}
-    oversteer_count = diag.get("oversteerEvents") or 0
-    understeer_count = diag.get("understeerEvents") or 0
-    front_lock_count = diag.get("frontLockingEvents") or 0
-    kerb_hits = diag.get("kerbBottomingEvents") or 0
-    # Behavioural evidence is useful even when the lap was invalid.
-    # Invalid laps must not affect lap-time/pace analysis, but events such
-    # as oversteer, understeer still describe the car's
-    # behaviour and should influence setup recommendations.
-    # Only laps on the current setup count: after a change, laps on the old one would
-    # keep asking for the change that was just made.
-    changed = snapshot.get("setupChangedLap")
-    laps = [
-        lap
-        for lap in snapshot.get("completedLaps", [])
-        if changed is None or lap.get("lapNumber", 0) >= changed
-    ]
-    for lap in laps[-3:]:
-        oversteer_count += lap.get("oversteerEvents", 0) or 0
-        understeer_count += lap.get("understeerEvents", 0) or 0
+#     # Telemetry metrics
+#     inner = snapshot["telemetry"].get("tyresInnerTemperature") or {
+#         "fl": 100,
+#         "fr": 100,
+#         "rl": 100,
+#         "rr": 100,
+#     }
+#     front_inner_avg = (inner["fl"] + inner["fr"]) / 2
+#     rear_inner_avg = (inner["rl"] + inner["rr"]) / 2
+#     diag = snapshot.get("diagnostics") or {}
+#     oversteer_count = diag.get("oversteerEvents") or 0
+#     understeer_count = diag.get("understeerEvents") or 0
+#     front_lock_count = diag.get("frontLockingEvents") or 0
+#     kerb_hits = diag.get("kerbBottomingEvents") or 0
+#     # Behavioural evidence is useful even when the lap was invalid.
+#     # Invalid laps must not affect lap-time/pace analysis, but events such
+#     # as oversteer, understeer still describe the car's
+#     # behaviour and should influence setup recommendations.
+#     # Only laps on the current setup count: after a change, laps on the old one would
+#     # keep asking for the change that was just made.
+#     changed = snapshot.get("setupChangedLap")
+#     laps = [
+#         lap
+#         for lap in snapshot.get("completedLaps", [])
+#         if changed is None or lap.get("lapNumber", 0) >= changed
+#     ]
+#     for lap in laps[-3:]:
+#         oversteer_count += lap.get("oversteerEvents", 0) or 0
+#         understeer_count += lap.get("understeerEvents", 0) or 0
 
-    balance = 0  # negative = oversteer, positive = understeer
+#     balance = 0  # negative = oversteer, positive = understeer
 
-    # 1. Oversteer vs understeer balance
-    if oversteer_count > understeer_count + 2 or "oversteer_exit" in fb:
-        balance -= 4
-    if (
-        understeer_count > oversteer_count + 2
-        or "understeer_entry" in fb
-        or "understeer_mid" in fb
-    ):
-        balance += 4
-    if front_inner_avg > rear_inner_avg + 7:
-        balance += 2  # front tyres overheating = scrubbing/understeering
-    if rear_inner_avg > front_inner_avg + 7:
-        balance -= 2  # rear tyres overheating = spinning/oversteering
+#     # 1. Oversteer vs understeer balance
+#     if oversteer_count > understeer_count + 2 or "oversteer_exit" in fb:
+#         balance -= 4
+#     if (
+#         understeer_count > oversteer_count + 2
+#         or "understeer_entry" in fb
+#         or "understeer_mid" in fb
+#     ):
+#         balance += 4
+#     if front_inner_avg > rear_inner_avg + 7:
+#         balance += 2  # front tyres overheating = scrubbing/understeering
+#     if rear_inner_avg > front_inner_avg + 7:
+#         balance -= 2  # rear tyres overheating = spinning/oversteering
 
-    # DIAGNOSTIC 1: Corner entry understeer / turn-in bite
-    if "understeer_entry" in fb or balance >= 3:
-        issues.append(
-            {
-                "title": "Corner Entry Understeer Detected",
-                "description": "Car lacks front-axle bite into turn-in; front tyres scrubbing and running high core temperature.",
-                "severity": "warning",
-            }
-        )
-        if target["frontWing"] < 11:
-            old = target["frontWing"]
-            target["frontWing"] = min(11, target["frontWing"] + 1)
-            rec(
-                "Aerodynamics",
-                "frontWing",
-                "Front Wing Aero",
-                old,
-                target["frontWing"],
-                target["frontWing"] - old,
-                "clicks",
-                "Increases front downforce to pin front axle on entry into high & medium speed corners.",
-                "High",
-            )
-        if target["frontAntiRollBar"] > 3:
-            old = target["frontAntiRollBar"]
-            target["frontAntiRollBar"] = max(2, target["frontAntiRollBar"] - 1)
-            rec(
-                "Suspension",
-                "frontAntiRollBar",
-                "Front Anti-Roll Bar",
-                old,
-                target["frontAntiRollBar"],
-                target["frontAntiRollBar"] - old,
-                "clicks",
-                "Softening front ARB increases front mechanical grip and reduces understeer mid-corner.",
-                "Medium",
-            )
-        if target["offThrottleDiff"] > 52:
-            old = target["offThrottleDiff"]
-            target["offThrottleDiff"] = max(50, target["offThrottleDiff"] - 3)
-            rec(
-                "Transmission",
-                "offThrottleDiff",
-                "Off-Throttle Differential",
-                old,
-                target["offThrottleDiff"],
-                target["offThrottleDiff"] - old,
-                "%",
-                "Lower off-throttle diff allows wheels to rotate freely under braking, promoting turn-in rotation.",
-                "Medium",
-            )
+#     # DIAGNOSTIC 1: Corner entry understeer / turn-in bite
+#     if "understeer_entry" in fb or balance >= 3:
+#         issues.append(
+#             {
+#                 "title": "Corner Entry Understeer Detected",
+#                 "description": "Car lacks front-axle bite into turn-in; front tyres scrubbing and running high core temperature.",
+#                 "severity": "warning",
+#             }
+#         )
+#         if target["frontWing"] < 11:
+#             old = target["frontWing"]
+#             target["frontWing"] = min(11, target["frontWing"] + 1)
+#             rec(
+#                 "Aerodynamics",
+#                 "frontWing",
+#                 "Front Wing Aero",
+#                 old,
+#                 target["frontWing"],
+#                 target["frontWing"] - old,
+#                 "clicks",
+#                 "Increases front downforce to pin front axle on entry into high & medium speed corners.",
+#                 "High",
+#             )
+#         if target["frontAntiRollBar"] > 3:
+#             old = target["frontAntiRollBar"]
+#             target["frontAntiRollBar"] = max(2, target["frontAntiRollBar"] - 1)
+#             rec(
+#                 "Suspension",
+#                 "frontAntiRollBar",
+#                 "Front Anti-Roll Bar",
+#                 old,
+#                 target["frontAntiRollBar"],
+#                 target["frontAntiRollBar"] - old,
+#                 "clicks",
+#                 "Softening front ARB increases front mechanical grip and reduces understeer mid-corner.",
+#                 "Medium",
+#             )
+#         if target["offThrottleDiff"] > 52:
+#             old = target["offThrottleDiff"]
+#             target["offThrottleDiff"] = max(50, target["offThrottleDiff"] - 3)
+#             rec(
+#                 "Transmission",
+#                 "offThrottleDiff",
+#                 "Off-Throttle Differential",
+#                 old,
+#                 target["offThrottleDiff"],
+#                 target["offThrottleDiff"] - old,
+#                 "%",
+#                 "Lower off-throttle diff allows wheels to rotate freely under braking, promoting turn-in rotation.",
+#                 "Medium",
+#             )
 
-    # DIAGNOSTIC 2: Corner exit oversteer / traction snap
-    if "oversteer_exit" in fb or balance <= -3:
-        issues.append(
-            {
-                "title": "Traction Loss & Exit Oversteer",
-                "description": "Rear axle breakaways detected on throttle pickup. Rear tyres slipping under torque.",
-                "severity": "danger",
-            }
-        )
-        if target["onThrottleDiff"] > 55:
-            old = target["onThrottleDiff"]
-            target["onThrottleDiff"] = max(50, target["onThrottleDiff"] - 5)
-            rec(
-                "Transmission",
-                "onThrottleDiff",
-                "On-Throttle Differential",
-                old,
-                target["onThrottleDiff"],
-                target["onThrottleDiff"] - old,
-                "%",
-                "Unlocking the on-throttle diff prevents the inside wheel from forcing the rear axle to break loose.",
-                "High",
-            )
-        if target["rearAntiRollBar"] > 3:
-            old = target["rearAntiRollBar"]
-            target["rearAntiRollBar"] = max(2, target["rearAntiRollBar"] - 1)
-            rec(
-                "Suspension",
-                "rearAntiRollBar",
-                "Rear Anti-Roll Bar",
-                old,
-                target["rearAntiRollBar"],
-                target["rearAntiRollBar"] - old,
-                "clicks",
-                "Allows rear tyres to squat and generate lateral traction on corner exit.",
-                "High",
-            )
-        if target["rearLeftTyrePressure"] > 19.9:
-            old = target["rearLeftTyrePressure"]
-            target["rearLeftTyrePressure"] = max(
-                19.5, _fixed(target["rearLeftTyrePressure"] - 0.4, 1)
-            )
-            target["rearRightTyrePressure"] = target["rearLeftTyrePressure"]
-            rec(
-                "Tyres",
-                "rearLeftTyrePressure",
-                "Rear Tyre Pressures",
-                old,
-                target["rearLeftTyrePressure"],
-                _fixed(target["rearLeftTyrePressure"] - old, 1),
-                "PSI",
-                "Expands the rear tyre contact patch, maximizing traction out of slow corners.",
-                "Medium",
-            )
+#     # DIAGNOSTIC 2: Corner exit oversteer / traction snap
+#     if "oversteer_exit" in fb or balance <= -3:
+#         issues.append(
+#             {
+#                 "title": "Traction Loss & Exit Oversteer",
+#                 "description": "Rear axle breakaways detected on throttle pickup. Rear tyres slipping under torque.",
+#                 "severity": "danger",
+#             }
+#         )
+#         if target["onThrottleDiff"] > 55:
+#             old = target["onThrottleDiff"]
+#             target["onThrottleDiff"] = max(50, target["onThrottleDiff"] - 5)
+#             rec(
+#                 "Transmission",
+#                 "onThrottleDiff",
+#                 "On-Throttle Differential",
+#                 old,
+#                 target["onThrottleDiff"],
+#                 target["onThrottleDiff"] - old,
+#                 "%",
+#                 "Unlocking the on-throttle diff prevents the inside wheel from forcing the rear axle to break loose.",
+#                 "High",
+#             )
+#         if target["rearAntiRollBar"] > 3:
+#             old = target["rearAntiRollBar"]
+#             target["rearAntiRollBar"] = max(2, target["rearAntiRollBar"] - 1)
+#             rec(
+#                 "Suspension",
+#                 "rearAntiRollBar",
+#                 "Rear Anti-Roll Bar",
+#                 old,
+#                 target["rearAntiRollBar"],
+#                 target["rearAntiRollBar"] - old,
+#                 "clicks",
+#                 "Allows rear tyres to squat and generate lateral traction on corner exit.",
+#                 "High",
+#             )
+#         if target["rearLeftTyrePressure"] > 19.9:
+#             old = target["rearLeftTyrePressure"]
+#             target["rearLeftTyrePressure"] = max(
+#                 19.5, _fixed(target["rearLeftTyrePressure"] - 0.4, 1)
+#             )
+#             target["rearRightTyrePressure"] = target["rearLeftTyrePressure"]
+#             rec(
+#                 "Tyres",
+#                 "rearLeftTyrePressure",
+#                 "Rear Tyre Pressures",
+#                 old,
+#                 target["rearLeftTyrePressure"],
+#                 _fixed(target["rearLeftTyrePressure"] - old, 1),
+#                 "PSI",
+#                 "Expands the rear tyre contact patch, maximizing traction out of slow corners.",
+#                 "Medium",
+#             )
 
-    # DIAGNOSTIC 3: High-speed instability
-    if "high_speed_snap" in fb:
-        issues.append(
-            {
-                "title": "Aerodynamic & High-Speed Instability",
-                "description": "Rear aerodynamic load unstable at high speeds. Snap oversteer risk in rapid transitions.",
-                "severity": "danger",
-            }
-        )
-        if target["rearWing"] < 11:
-            old = target["rearWing"]
-            target["rearWing"] = min(11, target["rearWing"] + 1)
-            rec(
-                "Aerodynamics",
-                "rearWing",
-                "Rear Wing Aero",
-                old,
-                target["rearWing"],
-                target["rearWing"] - old,
-                "clicks",
-                "Bolsters rear downforce to firmly plant the rear diffuser in high-speed sweeps.",
-                "High",
-            )
-        if target["rearToe"] < 0.45:
-            old = target["rearToe"]
-            target["rearToe"] = min(0.50, _fixed(target["rearToe"] + 0.04, 2))
-            rec(
-                "Suspension Geometry",
-                "rearToe",
-                "Rear Toe-in",
-                old,
-                target["rearToe"],
-                _fixed(target["rearToe"] - old, 2),
-                "deg",
-                "Adds straight-line and high-speed directional stability to rear axle.",
-                "Low",
-            )
+#     # DIAGNOSTIC 3: High-speed instability
+#     if "high_speed_snap" in fb:
+#         issues.append(
+#             {
+#                 "title": "Aerodynamic & High-Speed Instability",
+#                 "description": "Rear aerodynamic load unstable at high speeds. Snap oversteer risk in rapid transitions.",
+#                 "severity": "danger",
+#             }
+#         )
+#         if target["rearWing"] < 11:
+#             old = target["rearWing"]
+#             target["rearWing"] = min(11, target["rearWing"] + 1)
+#             rec(
+#                 "Aerodynamics",
+#                 "rearWing",
+#                 "Rear Wing Aero",
+#                 old,
+#                 target["rearWing"],
+#                 target["rearWing"] - old,
+#                 "clicks",
+#                 "Bolsters rear downforce to firmly plant the rear diffuser in high-speed sweeps.",
+#                 "High",
+#             )
+#         if target["rearToe"] < 0.45:
+#             old = target["rearToe"]
+#             target["rearToe"] = min(0.50, _fixed(target["rearToe"] + 0.04, 2))
+#             rec(
+#                 "Suspension Geometry",
+#                 "rearToe",
+#                 "Rear Toe-in",
+#                 old,
+#                 target["rearToe"],
+#                 _fixed(target["rearToe"] - old, 2),
+#                 "deg",
+#                 "Adds straight-line and high-speed directional stability to rear axle.",
+#                 "Low",
+#             )
 
-    # DIAGNOSTIC 4: Kerb striking & suspension bottoming
-    if "kerb_unstable" in fb or kerb_hits > 3:
-        issues.append(
-            {
-                "title": "Chassis Bottoming on Kerbs",
-                "description": "Suspension too stiff or ride height too low; bottoming out over curbs unsettled the car.",
-                "severity": "warning",
-            }
-        )
-        if target["frontSuspension"] > 3:
-            old = target["frontSuspension"]
-            target["frontSuspension"] = max(2, target["frontSuspension"] - 1)
-            rec(
-                "Suspension",
-                "frontSuspension",
-                "Front Suspension Springs",
-                old,
-                target["frontSuspension"],
-                target["frontSuspension"] - old,
-                "clicks",
-                "Softens compliance so car absorbs rumble strips instead of skipping into the air.",
-                "Medium",
-            )
-        if target["frontRideHeight"] < 5:
-            old = target["frontRideHeight"]
-            target["frontRideHeight"] = min(6, target["frontRideHeight"] + 1)
-            target["rearRideHeight"] = min(7, target["rearRideHeight"] + 1)
-            rec(
-                "Suspension",
-                "frontRideHeight",
-                "Ride Height (Front & Rear)",
-                old,
-                target["frontRideHeight"],
-                1,
-                "clicks",
-                "Provides underfloor clearance to prevent floor damage and aerodynamic stalling over kerbs.",
-                "Medium",
-            )
+#     # DIAGNOSTIC 4: Kerb striking & suspension bottoming
+#     if "kerb_unstable" in fb or kerb_hits > 3:
+#         issues.append(
+#             {
+#                 "title": "Chassis Bottoming on Kerbs",
+#                 "description": "Suspension too stiff or ride height too low; bottoming out over curbs unsettled the car.",
+#                 "severity": "warning",
+#             }
+#         )
+#         if target["frontSuspension"] > 3:
+#             old = target["frontSuspension"]
+#             target["frontSuspension"] = max(2, target["frontSuspension"] - 1)
+#             rec(
+#                 "Suspension",
+#                 "frontSuspension",
+#                 "Front Suspension Springs",
+#                 old,
+#                 target["frontSuspension"],
+#                 target["frontSuspension"] - old,
+#                 "clicks",
+#                 "Softens compliance so car absorbs rumble strips instead of skipping into the air.",
+#                 "Medium",
+#             )
+#         if target["frontRideHeight"] < 5:
+#             old = target["frontRideHeight"]
+#             target["frontRideHeight"] = min(6, target["frontRideHeight"] + 1)
+#             target["rearRideHeight"] = min(7, target["rearRideHeight"] + 1)
+#             rec(
+#                 "Suspension",
+#                 "frontRideHeight",
+#                 "Ride Height (Front & Rear)",
+#                 old,
+#                 target["frontRideHeight"],
+#                 1,
+#                 "clicks",
+#                 "Provides underfloor clearance to prevent floor damage and aerodynamic stalling over kerbs.",
+#                 "Medium",
+#             )
 
-    # DIAGNOSTIC 5: Brake locking & thermal distribution
-    if "front_locking" in fb or front_lock_count > 2:
-        issues.append(
-            {
-                "title": "Front Brake Lockup Tendency",
-                "description": "Excessive front braking torque causing front wheels to lock into heavy braking zones.",
-                "severity": "warning",
-            }
-        )
-        if target["brakeBias"] > 53:
-            old = target["brakeBias"]
-            target["brakeBias"] = max(50, target["brakeBias"] - 1)
-            rec(
-                "Brakes",
-                "brakeBias",
-                "Front Brake Bias",
-                old,
-                target["brakeBias"],
-                target["brakeBias"] - old,
-                "%",
-                "Moves braking balance rearward, freeing front tyres from locking up and preventing flat spots.",
-                "High",
-            )
+#     # DIAGNOSTIC 5: Brake locking & thermal distribution
+#     if "front_locking" in fb or front_lock_count > 2:
+#         issues.append(
+#             {
+#                 "title": "Front Brake Lockup Tendency",
+#                 "description": "Excessive front braking torque causing front wheels to lock into heavy braking zones.",
+#                 "severity": "warning",
+#             }
+#         )
+#         if target["brakeBias"] > 53:
+#             old = target["brakeBias"]
+#             target["brakeBias"] = max(50, target["brakeBias"] - 1)
+#             rec(
+#                 "Brakes",
+#                 "brakeBias",
+#                 "Front Brake Bias",
+#                 old,
+#                 target["brakeBias"],
+#                 target["brakeBias"] - old,
+#                 "%",
+#                 "Moves braking balance rearward, freeing front tyres from locking up and preventing flat spots.",
+#                 "High",
+#             )
 
-    if "rear_locking" in fb:
-        issues.append(
-            {
-                "title": "Rear Axle Snapping Under Braking",
-                "description": "Rear tyres locking up under deceleration, causing sudden yaw rotation.",
-                "severity": "danger",
-            }
-        )
-        if target["brakeBias"] < 60:
-            old = target["brakeBias"]
-            target["brakeBias"] = min(62, target["brakeBias"] + 2)
-            rec(
-                "Brakes",
-                "brakeBias",
-                "Front Brake Bias",
-                old,
-                target["brakeBias"],
-                target["brakeBias"] - old,
-                "%",
-                "Shifts bias forward to prevent dangerous rear brake lockup spins.",
-                "High",
-            )
-    # DIAGNOSTIC 6: High tyre wear / degradation
-    #
-    # Use the last three valid laps to estimate degradation rate.
-    # This is intentionally separate from tyre temperature: tyres can wear quickly
-    # because of scrub/load even while their core temperature remains acceptable.
-    valid_laps = [lap for lap in snapshot["completedLaps"] if lap.get("isValid")]
+#     if "rear_locking" in fb:
+#         issues.append(
+#             {
+#                 "title": "Rear Axle Snapping Under Braking",
+#                 "description": "Rear tyres locking up under deceleration, causing sudden yaw rotation.",
+#                 "severity": "danger",
+#             }
+#         )
+#         if target["brakeBias"] < 60:
+#             old = target["brakeBias"]
+#             target["brakeBias"] = min(62, target["brakeBias"] + 2)
+#             rec(
+#                 "Brakes",
+#                 "brakeBias",
+#                 "Front Brake Bias",
+#                 old,
+#                 target["brakeBias"],
+#                 target["brakeBias"] - old,
+#                 "%",
+#                 "Shifts bias forward to prevent dangerous rear brake lockup spins.",
+#                 "High",
+#             )
+#     # DIAGNOSTIC 6: High tyre wear / degradation
+#     #
+#     # Use the last three valid laps to estimate degradation rate.
+#     # This is intentionally separate from tyre temperature: tyres can wear quickly
+#     # because of scrub/load even while their core temperature remains acceptable.
+#     valid_laps = [lap for lap in snapshot["completedLaps"] if lap.get("isValid")]
 
-    recent_wear_laps = valid_laps[-3:]
+#     recent_wear_laps = valid_laps[-3:]
 
-    front_wear_samples = []
-    rear_wear_samples = []
+#     front_wear_samples = []
+#     rear_wear_samples = []
 
-    for lap in recent_wear_laps:
-        delta = lap.get("tyreWearDelta", {})
+#     for lap in recent_wear_laps:
+#         delta = lap.get("tyreWearDelta", {})
 
-        front_wear_samples.append(
-            max(
-                0.0,
-                delta.get("fl", 0.0),
-                delta.get("fr", 0.0),
-            )
-        )
+#         front_wear_samples.append(
+#             max(
+#                 0.0,
+#                 delta.get("fl", 0.0),
+#                 delta.get("fr", 0.0),
+#             )
+#         )
 
-        rear_wear_samples.append(
-            max(
-                0.0,
-                delta.get("rl", 0.0),
-                delta.get("rr", 0.0),
-            )
-        )
+#         rear_wear_samples.append(
+#             max(
+#                 0.0,
+#                 delta.get("rl", 0.0),
+#                 delta.get("rr", 0.0),
+#             )
+#         )
 
-    front_wear_rate = (
-        sum(front_wear_samples) / len(front_wear_samples) if front_wear_samples else 0.0
-    )
+#     front_wear_rate = (
+#         sum(front_wear_samples) / len(front_wear_samples) if front_wear_samples else 0.0
+#     )
 
-    rear_wear_rate = (
-        sum(rear_wear_samples) / len(rear_wear_samples) if rear_wear_samples else 0.0
-    )
+#     rear_wear_rate = (
+#         sum(rear_wear_samples) / len(rear_wear_samples) if rear_wear_samples else 0.0
+#     )
 
-    current_wear = snapshot.get("damage", {}).get(
-        "tyresWear",
-        {"fl": 0.0, "fr": 0.0, "rl": 0.0, "rr": 0.0},
-    )
+#     current_wear = snapshot.get("damage", {}).get(
+#         "tyresWear",
+#         {"fl": 0.0, "fr": 0.0, "rl": 0.0, "rr": 0.0},
+#     )
 
-    front_current_wear = max(
-        current_wear.get("fl", 0.0),
-        current_wear.get("fr", 0.0),
-    )
+#     front_current_wear = max(
+#         current_wear.get("fl", 0.0),
+#         current_wear.get("fr", 0.0),
+#     )
 
-    rear_current_wear = max(
-        current_wear.get("rl", 0.0),
-        current_wear.get("rr", 0.0),
-    )
+#     rear_current_wear = max(
+#         current_wear.get("rl", 0.0),
+#         current_wear.get("rr", 0.0),
+#     )
 
-    peak_current_wear = max(
-        front_current_wear,
-        rear_current_wear,
-    )
+#     peak_current_wear = max(
+#         front_current_wear,
+#         rear_current_wear,
+#     )
 
-    if "high_tyre_wear" in fb:
-        if recent_wear_laps:
-            wear_description = (
-                f"Recent tyre wear is approximately "
-                f"{_to_fixed(front_wear_rate, 1)}%/lap front and "
-                f"{_to_fixed(rear_wear_rate, 1)}%/lap rear. "
-                f"Peak current wear is {_round(peak_current_wear)}%."
-            )
-        else:
-            wear_description = (
-                f"Current peak tyre wear is {_round(peak_current_wear)}%, "
-                "but there are not enough valid laps to calculate a wear rate yet."
-            )
+#     if "high_tyre_wear" in fb:
+#         if recent_wear_laps:
+#             wear_description = (
+#                 f"Recent tyre wear is approximately "
+#                 f"{_to_fixed(front_wear_rate, 1)}%/lap front and "
+#                 f"{_to_fixed(rear_wear_rate, 1)}%/lap rear. "
+#                 f"Peak current wear is {_round(peak_current_wear)}%."
+#             )
+#         else:
+#             wear_description = (
+#                 f"Current peak tyre wear is {_round(peak_current_wear)}%, "
+#                 "but there are not enough valid laps to calculate a wear rate yet."
+#             )
 
-        issues.append(
-            {
-                "title": "High Tyre Wear / Degradation",
-                "description": wear_description,
-                "severity": "warning",
-            }
-        )
+#         issues.append(
+#             {
+#                 "title": "High Tyre Wear / Degradation",
+#                 "description": wear_description,
+#                 "severity": "warning",
+#             }
+#         )
 
-        # Determine which axle is degrading faster.
-        if not recent_wear_laps:
-            dominant_axle = "front"
-        elif front_wear_rate >= rear_wear_rate:
-            dominant_axle = "front"
-        else:
-            dominant_axle = "rear"
+#         # Determine which axle is degrading faster.
+#         if not recent_wear_laps:
+#             dominant_axle = "front"
+#         elif front_wear_rate >= rear_wear_rate:
+#             dominant_axle = "front"
+#         else:
+#             dominant_axle = "rear"
 
-        # ---------------------------------------------------------------
-        # FRONT TYRE DEGRADATION
-        # ---------------------------------------------------------------
-        if dominant_axle == "front":
-            # Reduce front tyre pressure.
-            if target["frontLeftTyrePressure"] > 21.0:
-                old = target["frontLeftTyrePressure"]
+#         # ---------------------------------------------------------------
+#         # FRONT TYRE DEGRADATION
+#         # ---------------------------------------------------------------
+#         if dominant_axle == "front":
+#             # Reduce front tyre pressure.
+#             if target["frontLeftTyrePressure"] > 21.0:
+#                 old = target["frontLeftTyrePressure"]
 
-                target["frontLeftTyrePressure"] = max(
-                    21.0,
-                    _fixed(old - 0.4, 1),
-                )
+#                 target["frontLeftTyrePressure"] = max(
+#                     21.0,
+#                     _fixed(old - 0.4, 1),
+#                 )
 
-                target["frontRightTyrePressure"] = target["frontLeftTyrePressure"]
+#                 target["frontRightTyrePressure"] = target["frontLeftTyrePressure"]
 
-                rec(
-                    "Tyres",
-                    "frontLeftTyrePressure",
-                    "Front Tyre Pressures",
-                    old,
-                    target["frontLeftTyrePressure"],
-                    _fixed(
-                        target["frontLeftTyrePressure"] - old,
-                        1,
-                    ),
-                    "PSI",
-                    "Reduces front tyre scrub and contact-patch stress to slow degradation.",
-                    "High",
-                )
+#                 rec(
+#                     "Tyres",
+#                     "frontLeftTyrePressure",
+#                     "Front Tyre Pressures",
+#                     old,
+#                     target["frontLeftTyrePressure"],
+#                     _fixed(
+#                         target["frontLeftTyrePressure"] - old,
+#                         1,
+#                     ),
+#                     "PSI",
+#                     "Reduces front tyre scrub and contact-patch stress to slow degradation.",
+#                     "High",
+#                 )
 
-            # Reduce front toe.
-            if target["frontToe"] > 0.05:
-                old = target["frontToe"]
+#             # Reduce front toe.
+#             if target["frontToe"] > 0.05:
+#                 old = target["frontToe"]
 
-                target["frontToe"] = max(
-                    0.05,
-                    _fixed(old - 0.02, 2),
-                )
+#                 target["frontToe"] = max(
+#                     0.05,
+#                     _fixed(old - 0.02, 2),
+#                 )
 
-                rec(
-                    "Suspension Geometry",
-                    "frontToe",
-                    "Front Toe",
-                    old,
-                    target["frontToe"],
-                    _fixed(
-                        target["frontToe"] - old,
-                        2,
-                    ),
-                    "deg",
-                    "Reducing front toe lowers rolling scrub and unnecessary tyre wear.",
-                    "Medium",
-                )
+#                 rec(
+#                     "Suspension Geometry",
+#                     "frontToe",
+#                     "Front Toe",
+#                     old,
+#                     target["frontToe"],
+#                     _fixed(
+#                         target["frontToe"] - old,
+#                         2,
+#                     ),
+#                     "deg",
+#                     "Reducing front toe lowers rolling scrub and unnecessary tyre wear.",
+#                     "Medium",
+#                 )
 
-            # Reduce negative front camber slightly.
-            if target["frontCamber"] < -2.5:
-                old = target["frontCamber"]
+#             # Reduce negative front camber slightly.
+#             if target["frontCamber"] < -2.5:
+#                 old = target["frontCamber"]
 
-                target["frontCamber"] = min(
-                    -2.5,
-                    _fixed(old + 0.2, 2),
-                )
+#                 target["frontCamber"] = min(
+#                     -2.5,
+#                     _fixed(old + 0.2, 2),
+#                 )
 
-                rec(
-                    "Suspension Geometry",
-                    "frontCamber",
-                    "Front Camber",
-                    old,
-                    target["frontCamber"],
-                    _fixed(
-                        target["frontCamber"] - old,
-                        2,
-                    ),
-                    "deg",
-                    "Reducing negative camber spreads load across the front tyre and limits inner-edge wear.",
-                    "Low",
-                )
+#                 rec(
+#                     "Suspension Geometry",
+#                     "frontCamber",
+#                     "Front Camber",
+#                     old,
+#                     target["frontCamber"],
+#                     _fixed(
+#                         target["frontCamber"] - old,
+#                         2,
+#                     ),
+#                     "deg",
+#                     "Reducing negative camber spreads load across the front tyre and limits inner-edge wear.",
+#                     "Low",
+#                 )
 
-        # ---------------------------------------------------------------
-        # REAR TYRE DEGRADATION
-        # ---------------------------------------------------------------
-        else:
-            # Reduce rear tyre pressure.
-            if target["rearLeftTyrePressure"] > 19.5:
-                old = target["rearLeftTyrePressure"]
+#         # ---------------------------------------------------------------
+#         # REAR TYRE DEGRADATION
+#         # ---------------------------------------------------------------
+#         else:
+#             # Reduce rear tyre pressure.
+#             if target["rearLeftTyrePressure"] > 19.5:
+#                 old = target["rearLeftTyrePressure"]
 
-                target["rearLeftTyrePressure"] = max(
-                    19.5,
-                    _fixed(old - 0.4, 1),
-                )
+#                 target["rearLeftTyrePressure"] = max(
+#                     19.5,
+#                     _fixed(old - 0.4, 1),
+#                 )
 
-                target["rearRightTyrePressure"] = target["rearLeftTyrePressure"]
+#                 target["rearRightTyrePressure"] = target["rearLeftTyrePressure"]
 
-                rec(
-                    "Tyres",
-                    "rearLeftTyrePressure",
-                    "Rear Tyre Pressures",
-                    old,
-                    target["rearLeftTyrePressure"],
-                    _fixed(
-                        target["rearLeftTyrePressure"] - old,
-                        1,
-                    ),
-                    "PSI",
-                    "Reduces rear tyre scrub and contact-patch stress to slow degradation under traction.",
-                    "High",
-                )
+#                 rec(
+#                     "Tyres",
+#                     "rearLeftTyrePressure",
+#                     "Rear Tyre Pressures",
+#                     old,
+#                     target["rearLeftTyrePressure"],
+#                     _fixed(
+#                         target["rearLeftTyrePressure"] - old,
+#                         1,
+#                     ),
+#                     "PSI",
+#                     "Reduces rear tyre scrub and contact-patch stress to slow degradation under traction.",
+#                     "High",
+#                 )
 
-            # Reduce rear toe.
-            if target["rearToe"] > 0.20:
-                old = target["rearToe"]
+#             # Reduce rear toe.
+#             if target["rearToe"] > 0.20:
+#                 old = target["rearToe"]
 
-                target["rearToe"] = max(
-                    0.20,
-                    _fixed(old - 0.02, 2),
-                )
+#                 target["rearToe"] = max(
+#                     0.20,
+#                     _fixed(old - 0.02, 2),
+#                 )
 
-                rec(
-                    "Suspension Geometry",
-                    "rearToe",
-                    "Rear Toe",
-                    old,
-                    target["rearToe"],
-                    _fixed(
-                        target["rearToe"] - old,
-                        2,
-                    ),
-                    "deg",
-                    "Reducing rear toe lowers rolling scrub and unnecessary tyre temperature/wear.",
-                    "Medium",
-                )
+#                 rec(
+#                     "Suspension Geometry",
+#                     "rearToe",
+#                     "Rear Toe",
+#                     old,
+#                     target["rearToe"],
+#                     _fixed(
+#                         target["rearToe"] - old,
+#                         2,
+#                     ),
+#                     "deg",
+#                     "Reducing rear toe lowers rolling scrub and unnecessary tyre temperature/wear.",
+#                     "Medium",
+#                 )
 
-            # Reduce negative rear camber slightly.
-            if target["rearCamber"] < -1.0:
-                old = target["rearCamber"]
+#             # Reduce negative rear camber slightly.
+#             if target["rearCamber"] < -1.0:
+#                 old = target["rearCamber"]
 
-                target["rearCamber"] = min(
-                    -1.0,
-                    _fixed(old + 0.2, 2),
-                )
+#                 target["rearCamber"] = min(
+#                     -1.0,
+#                     _fixed(old + 0.2, 2),
+#                 )
 
-                rec(
-                    "Suspension Geometry",
-                    "rearCamber",
-                    "Rear Camber",
-                    old,
-                    target["rearCamber"],
-                    _fixed(
-                        target["rearCamber"] - old,
-                        2,
-                    ),
-                    "deg",
-                    "Reducing negative camber spreads rear-axle load and limits inner-edge wear.",
-                    "Low",
-                )
+#                 rec(
+#                     "Suspension Geometry",
+#                     "rearCamber",
+#                     "Rear Camber",
+#                     old,
+#                     target["rearCamber"],
+#                     _fixed(
+#                         target["rearCamber"] - old,
+#                         2,
+#                     ),
+#                     "deg",
+#                     "Reducing negative camber spreads rear-axle load and limits inner-edge wear.",
+#                     "Low",
+#                 )
 
-            # Reduce on-throttle differential if rear degradation is dominant.
-            if target["onThrottleDiff"] > 50:
-                old = target["onThrottleDiff"]
+#             # Reduce on-throttle differential if rear degradation is dominant.
+#             if target["onThrottleDiff"] > 50:
+#                 old = target["onThrottleDiff"]
 
-                target["onThrottleDiff"] = max(
-                    50,
-                    target["onThrottleDiff"] - 3,
-                )
+#                 target["onThrottleDiff"] = max(
+#                     50,
+#                     target["onThrottleDiff"] - 3,
+#                 )
 
-                rec(
-                    "Transmission",
-                    "onThrottleDiff",
-                    "On-Throttle Differential",
-                    old,
-                    target["onThrottleDiff"],
-                    target["onThrottleDiff"] - old,
-                    "%",
-                    "A more open differential reduces rear wheel slip and torque-induced tyre degradation on corner exits.",
-                    "Medium",
-                )
-    # DIAGNOSTIC 7: Tyre thermal overheating (>104°C)
-    if "tyres_overheating" in fb or front_inner_avg > 105 or rear_inner_avg > 105:
-        issues.append(
-            {
-                "title": "Tyre Thermal Degradation / Overheating",
-                "description": f"Core temperatures reaching {_round(max(front_inner_avg, rear_inner_avg))}°C, outside optimal 95-102°C operating window.",
-                "severity": "warning",
-            }
-        )
-        if target["frontLeftTyrePressure"] > 21.8:
-            old = target["frontLeftTyrePressure"]
-            target["frontLeftTyrePressure"] = max(
-                21.0, _fixed(target["frontLeftTyrePressure"] - 0.4, 1)
-            )
-            target["frontRightTyrePressure"] = target["frontLeftTyrePressure"]
-            rec(
-                "Tyres",
-                "frontLeftTyrePressure",
-                "Front Tyre Pressures",
-                old,
-                target["frontLeftTyrePressure"],
-                _fixed(target["frontLeftTyrePressure"] - old, 1),
-                "PSI",
-                "Lowers internal thermal pressure buildup and widens footprint to dissipate heat.",
-                "High",
-            )
+#                 rec(
+#                     "Transmission",
+#                     "onThrottleDiff",
+#                     "On-Throttle Differential",
+#                     old,
+#                     target["onThrottleDiff"],
+#                     target["onThrottleDiff"] - old,
+#                     "%",
+#                     "A more open differential reduces rear wheel slip and torque-induced tyre degradation on corner exits.",
+#                     "Medium",
+#                 )
+#     # DIAGNOSTIC 7: Tyre thermal overheating (>104°C)
+#     if "tyres_overheating" in fb or front_inner_avg > 105 or rear_inner_avg > 105:
+#         issues.append(
+#             {
+#                 "title": "Tyre Thermal Degradation / Overheating",
+#                 "description": f"Core temperatures reaching {_round(max(front_inner_avg, rear_inner_avg))}°C, outside optimal 95-102°C operating window.",
+#                 "severity": "warning",
+#             }
+#         )
+#         if target["frontLeftTyrePressure"] > 21.8:
+#             old = target["frontLeftTyrePressure"]
+#             target["frontLeftTyrePressure"] = max(
+#                 21.0, _fixed(target["frontLeftTyrePressure"] - 0.4, 1)
+#             )
+#             target["frontRightTyrePressure"] = target["frontLeftTyrePressure"]
+#             rec(
+#                 "Tyres",
+#                 "frontLeftTyrePressure",
+#                 "Front Tyre Pressures",
+#                 old,
+#                 target["frontLeftTyrePressure"],
+#                 _fixed(target["frontLeftTyrePressure"] - old, 1),
+#                 "PSI",
+#                 "Lowers internal thermal pressure buildup and widens footprint to dissipate heat.",
+#                 "High",
+#             )
 
-    # DIAGNOSTIC 8: Straight-line speed deficit
-    if "lacking_top_speed" in fb:
-        issues.append(
-            {
-                "title": "Excessive Aerodynamic Drag",
-                "description": "Downforce trim is heavily penalizing top speed traps on primary straights.",
-                "severity": "info",
-            }
-        )
-        if target["rearWing"] > 2:
-            old = target["rearWing"]
-            target["rearWing"] = max(1, target["rearWing"] - 1)
-            rec(
-                "Aerodynamics",
-                "rearWing",
-                "Rear Wing Aero",
-                old,
-                target["rearWing"],
-                target["rearWing"] - old,
-                "clicks",
-                "Trims drag on straights for higher terminal top speed and overtaking capability.",
-                "Medium",
-            )
+#     # DIAGNOSTIC 8: Straight-line speed deficit
+#     if "lacking_top_speed" in fb:
+#         issues.append(
+#             {
+#                 "title": "Excessive Aerodynamic Drag",
+#                 "description": "Downforce trim is heavily penalizing top speed traps on primary straights.",
+#                 "severity": "info",
+#             }
+#         )
+#         if target["rearWing"] > 2:
+#             old = target["rearWing"]
+#             target["rearWing"] = max(1, target["rearWing"] - 1)
+#             rec(
+#                 "Aerodynamics",
+#                 "rearWing",
+#                 "Rear Wing Aero",
+#                 old,
+#                 target["rearWing"],
+#                 target["rearWing"] - old,
+#                 "clicks",
+#                 "Trims drag on straights for higher terminal top speed and overtaking capability.",
+#                 "Medium",
+#             )
 
-    label = "Balanced / Neutral"
-    if balance <= -5:
-        label = "Heavy Oversteer"
-    elif balance <= -2:
-        label = "Mild Oversteer"
-    elif balance >= 5:
-        label = "Heavy Understeer"
-    elif balance >= 2:
-        label = "Mild Understeer"
+#     label = "Balanced / Neutral"
+#     if balance <= -5:
+#         label = "Heavy Oversteer"
+#     elif balance <= -2:
+#         label = "Mild Oversteer"
+#     elif balance >= 5:
+#         label = "Heavy Understeer"
+#     elif balance >= 2:
+#         label = "Mild Understeer"
 
-    briefing = session_briefing(
-        snapshot, label, recommendations[0] if recommendations else None
-    )
-    return {
-        "radioMessage": briefing["radioMessage"],
-        "briefing": briefing,
-        "balanceScore": max(-10, min(10, balance)),
-        "balanceLabel": label,
-        "recommendations": recommendations,
-        "diagnosedIssues": issues,
-        "targetSetup": target,
-    }
+#     briefing = session_briefing(
+#         snapshot, label, recommendations[0] if recommendations else None
+#     )
+#     return {
+#         "radioMessage": briefing["radioMessage"],
+#         "briefing": briefing,
+#         "balanceScore": max(-10, min(10, balance)),
+#         "balanceLabel": label,
+#         "recommendations": recommendations,
+#         "diagnosedIssues": issues,
+#         "targetSetup": target,
+#     }
 
 
 # ---------------------------------------------------------------------------------------- strategy
