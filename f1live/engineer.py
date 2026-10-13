@@ -574,6 +574,95 @@ def _num(x: float) -> str:
     return repr(float(x))
 
 
+def _corner_style_summary(profile: list[dict]) -> dict:
+    """Summarize the driver's repeated braking, steering and throttle technique."""
+    rows = [r for r in profile if (r.get("laps") or 0) >= 1]
+    if not rows:
+        return {}
+
+    def mean(key: str) -> float | None:
+        values = [r[key] for r in rows if r.get(key) is not None]
+        return round(sum(values) / len(values), 1) if values else None
+
+    return {
+        "corners": len(rows),
+        "laps": max((r.get("laps") or 0) for r in rows),
+        "trailBrakingPct": mean("trail_braking_pct"),
+        "steeringPeak": mean("steer_peak"),
+        "brakeAtApex": mean("brake_at_apex"),
+        "throttleAtApex": mean("throttle_at_apex"),
+        "throttleApplicationDistance": mean("throttle_at"),
+    }
+
+
+def _corner_style_recommendations(
+    target: dict, profile: list[dict], oversteer_count: int, understeer_count: int
+) -> list[dict]:
+    """Turn consistent corner technique into small, explainable setup changes."""
+    rows = [r for r in profile if (r.get("laps") or 0) >= 2]
+    if len(rows) < 2:
+        return []
+
+    def average(key: str) -> float | None:
+        values = [float(r[key]) for r in rows if r.get(key) is not None]
+        return sum(values) / len(values) if values else None
+
+    trail = average("trail_braking_pct")
+    brake_apex = average("brake_at_apex")
+    steer_peak = average("steer_peak")
+    throttle_apex = average("throttle_at_apex")
+    out: list[dict] = []
+
+    def add(category, parameter, label, old, new, unit, reason, priority):
+        if new == old:
+            return
+        target[parameter] = new
+        out.append({
+            "category": category, "parameter": parameter, "label": label,
+            "current": old, "recommended": new, "delta": new - old,
+            "unit": unit, "reason": reason, "priority": priority,
+        })
+
+    if (trail or 0) >= 35 and (brake_apex or 0) >= 0.15:
+        if target["brakeBias"] > 50:
+            old = target["brakeBias"]
+            add("Brakes", "brakeBias", "Front Brake Bias", old, max(50, old - 1), "%",
+                "This driver consistently trail-brakes into the apex; moving one click rearward keeps the front tyres available for steering while braking.",
+                "Medium")
+        if target["offThrottleDiff"] > 50:
+            old = target["offThrottleDiff"]
+            add("Transmission", "offThrottleDiff", "Off-Throttle Differential", old,
+                max(50, old - 2), "%",
+                "Supports the driver's brake-to-steer technique by allowing more rotation as brake pressure is released.",
+                "Low")
+
+    if (steer_peak or 0) >= 0.65 and (throttle_apex or 0) < 0.25 and understeer_count >= oversteer_count:
+        if target["frontWing"] < 11:
+            old = target["frontWing"]
+            add("Aerodynamics", "frontWing", "Front Wing Aero", old, old + 1, "clicks",
+                "Repeated high steering demand and low apex throttle show that this driver needs more front-end support through the corner.",
+                "Medium")
+        if target["frontAntiRollBar"] > 2:
+            old = target["frontAntiRollBar"]
+            add("Suspension", "frontAntiRollBar", "Front Anti-Roll Bar", old, old - 1, "clicks",
+                "Softens the front axle for the driver's high steering-load cornering style and improves mechanical grip at the apex.",
+                "Low")
+
+    if (throttle_apex or 0) >= 0.35 and (steer_peak or 0) >= 0.45 and oversteer_count > understeer_count:
+        if target["onThrottleDiff"] > 50:
+            old = target["onThrottleDiff"]
+            add("Transmission", "onThrottleDiff", "On-Throttle Differential", old,
+                max(50, old - 3), "%",
+                "This driver applies throttle before the steering is unwound; opening the diff gives the rear tyres a smoother torque split on corner exit.",
+                "Medium")
+        if target["rearAntiRollBar"] > 2:
+            old = target["rearAntiRollBar"]
+            add("Suspension", "rearAntiRollBar", "Rear Anti-Roll Bar", old, old - 1, "clicks",
+                "Adds rear compliance for an early-throttle exit style and helps the driven tyres keep traction while steering is still loaded.",
+                "Low")
+    return out
+
+
 # ------------------------------------------------------------------------------------ setup engine
 def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     """analyzeTelemetryAndGenerateSetup(snapshot, activeFeedback) from engineer_engine.ts."""
@@ -631,6 +720,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
         understeer_count += lap.get("understeerEvents", 0) or 0
 
     balance = 0  # negative = oversteer, positive = understeer
+    corner_profile = snapshot.get("cornerProfile") or snapshot.get("corner_profile") or []
 
     # 1. Oversteer vs understeer balance
     if oversteer_count > understeer_count + 2 or "oversteer_exit" in fb:
@@ -1192,6 +1282,27 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
                 "Medium",
             )
 
+    # DIAGNOSTIC 9: Driver-specific corner technique. These recommendations are
+    # deliberately based on repeated corner profiles, not a single telemetry frame.
+    # They complement the car-balance detectors above so the setup follows how this
+    # driver actually brakes, turns and applies throttle.
+    style_recommendations = _corner_style_recommendations(
+        target, corner_profile, oversteer_count, understeer_count
+    )
+    for recommendation in style_recommendations:
+        rec(
+            recommendation["category"], recommendation["parameter"],
+            recommendation["label"], recommendation["current"],
+            recommendation["recommended"], recommendation["delta"],
+            recommendation["unit"], recommendation["reason"],
+            recommendation["priority"],
+        )
+
+    if corner_profile:
+        result_style = _corner_style_summary(corner_profile)
+    else:
+        result_style = None
+
     label = "Balanced / Neutral"
     if balance <= -5:
         label = "Heavy Oversteer"
@@ -1205,7 +1316,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     briefing = session_briefing(
         snapshot, label, recommendations[0] if recommendations else None
     )
-    return {
+    result = {
         "radioMessage": briefing["radioMessage"],
         "briefing": briefing,
         "balanceScore": max(-10, min(10, balance)),
@@ -1214,6 +1325,9 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
         "diagnosedIssues": issues,
         "targetSetup": target,
     }
+    if result_style:
+        result["cornerAnalysis"] = result_style
+    return result
 
 
 # ---------------------------------------------------------------------------------------- strategy
@@ -1449,9 +1563,11 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
             "setup": bool(feed and feed.setup),
         }
         roster.append(row)
-        by_name[name.lower()] = dict(
-            row, snapshot=feed.snapshot(name, sess) if feed else None
-        )
+        snap = feed.snapshot(name, sess) if feed else None
+        if snap is not None:
+            snap["cornerProfile"] = s.corner_profile(c)
+            snap["drivingStyle"] = s.style_metrics(c)
+        by_name[name.lower()] = dict(row, snapshot=snap)
     return roster, by_name
 
 
