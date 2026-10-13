@@ -72,10 +72,17 @@ def blank(pid: int, st: float = 0.0, player: int = 0) -> dict:
     return p
 
 
-def motion(slip, susp_v=(0.0, 0.0, 0.0, 0.0), glat=0.0):
-    p = blank(P.MOTION)
+def motion(
+    slip,
+    susp_v=(0.0, 0.0, 0.0, 0.0),
+    glat=0.0,
+    angular_velocity_y=0.0,
+    st=0.0,
+):
+    p = blank(P.MOTION, st=st)
     p["wheelSlip"], p["suspensionVelocity"] = list(slip), list(susp_v)
     p["carMotionData"][0]["gForceLateral"] = glat
+    p["angularVelocityY"] = angular_velocity_y
     return p
 
 
@@ -235,6 +242,78 @@ def test_kerb_strikes_count_over_a_lap():
     assert not any(
         i["title"].startswith("Chassis Bottoming") for i in analysis["diagnosedIssues"]
     )
+
+
+def test_kerb_induced_spin_recommends_compliance_setup():
+    f = E.EngineerFeed()
+    lap = blank(P.LAP)
+    lap["lapData"][0].update(currentLapNum=1)
+    f.feed(lap, 0)
+
+    f.feed(
+        motion(
+            (0.45, 0.10, 0.05, 0.05),
+            susp_v=(0.0, 0.0, 1500.0, 0.0),
+            glat=1.2,
+            angular_velocity_y=2.0,
+            st=10.0,
+        ),
+        0,
+    )
+    f.feed(
+        motion(
+            (0.45, 0.10, 0.05, 0.05),
+            glat=1.2,
+            st=10.1,
+        ),
+        0,
+    )
+    f.feed(
+        motion(
+            (0.45, 0.10, 0.05, 0.05),
+            glat=1.2,
+            st=10.2,
+        ),
+        0,
+    )
+    p = f.snapshot("x", {})["diagnostics"]
+    assert p["kerbSpinEvents"] == 1
+
+    setup = {
+        "frontWing": 7,
+        "rearWing": 7,
+        "onThrottleDiff": 60,
+        "offThrottleDiff": 55,
+        "frontCamber": -3.0,
+        "rearCamber": -1.5,
+        "frontToe": 0.1,
+        "rearToe": 0.3,
+        "frontSuspension": 5,
+        "rearSuspension": 5,
+        "frontAntiRollBar": 5,
+        "rearAntiRollBar": 5,
+        "frontRideHeight": 3,
+        "rearRideHeight": 4,
+        "brakeBias": 55,
+        "frontLeftTyrePressure": 23.0,
+        "frontRightTyrePressure": 23.0,
+        "rearLeftTyrePressure": 21.0,
+        "rearRightTyrePressure": 21.0,
+        "ballast": 5,
+        "fuelLoad": 20.0,
+    }
+    result = E.analyze(
+        {
+            **f.snapshot("x", {"sessionType": "Practice 1", "sessionTypeId": 1}),
+            "setup": setup,
+        }
+    )
+    assert any(
+        issue["title"] == "Kerb-Induced Spin from Stiff Suspension"
+        for issue in result["diagnosedIssues"]
+    )
+    parameters = {r["parameter"] for r in result["recommendations"]}
+    assert {"frontSuspension", "frontRideHeight"} <= parameters
 
 
 def test_setup_change_restarts_the_evidence():

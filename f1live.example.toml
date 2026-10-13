@@ -39,6 +39,9 @@ sessions = ["race"]       # session kinds that list incidents
 # slip_ratio = 1.5
 # kerb_suspension_velocity = 1000   # any |suspension velocity| above this (mm/s) is a kerb strike;
                                    # more than 3 in a lap flags the car as too stiff / too low
+# spin_angular_velocity = 1.5       # yaw rate (rad/s) used with rear slip and lateral g for spin detection
+# spin_lateral_g = 0.8
+# kerb_spin_window_s = 0.5          # seconds in which a spin can be linked to a kerb strike
 # lock_brake = 0.7             # brake pedal above this, with the front brakes...
 # lock_brake_temp_gap = 120    # ...this many °C hotter than the rears
 

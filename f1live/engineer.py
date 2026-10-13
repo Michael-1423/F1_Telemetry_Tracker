@@ -53,6 +53,11 @@ DEFAULTS: dict[str, float] = {
     "lock_brake": 0.7,  # brake pedal above this...
     # ...with front brakes this much hotter than the rears -> front locking sample
     "lock_brake_temp_gap": 120.0,
+    # a high yaw rate with rear slip while cornering is a spin-like event
+    "spin_angular_velocity": 1.5,
+    "spin_lateral_g": 0.8,
+    # kerb impact and spin can be separated by a few motion packets
+    "kerb_spin_window_s": 0.5,
 }
 
 FEED_PACKETS = {P.MOTION, P.LAP, P.TELEMETRY, P.STATUS, P.SETUPS}
@@ -244,6 +249,10 @@ class EngineerFeed:
         self.rear_locking_events = 0
         self.kerb_bottoming_events = 0  # this lap
         self.kerb_last_lap = 0  # the last completed lap
+        self.kerb_spin_events = 0  # this lap
+        self.kerb_spin_last_lap = 0
+        self._last_kerb_st = -1e9
+        self._spin_on = False
         self.setup_changed_lap: int | None = (
             None  # lap of the last setup change (counters restart there)
         )
@@ -269,6 +278,7 @@ class EngineerFeed:
         m = {
             "gForceLateral": round(cm["gForceLateral"], 2),
             "gForceLongitudinal": round(cm["gForceLongitudinal"], 2),
+            "angularVelocityY": round(extra["angularVelocityY"], 3),
             # [RL, RR, FL, FR]
             "wheelSlip": [round(x, 4) for x in extra["wheelSlip"]],
             "suspensionPosition": [round(x, 4) for x in extra["suspensionPosition"]],
@@ -298,6 +308,18 @@ class EngineerFeed:
             abs(v) > th["kerb_suspension_velocity"] for v in m["suspensionVelocity"]
         ):
             self.kerb_bottoming_events += 1
+            self._last_kerb_st = self.last_st
+
+        rear_slip = max(slips[:2]) if len(slips) >= 2 else 0.0
+        spin_now = (
+            abs(m["angularVelocityY"]) > th["spin_angular_velocity"]
+            and rear_slip > th["oversteer_slip"]
+            and abs(m["gForceLateral"]) > th["spin_lateral_g"]
+        )
+        if spin_now and not self._spin_on:
+            if self.last_st - self._last_kerb_st <= th["kerb_spin_window_s"]:
+                self.kerb_spin_events += 1
+        self._spin_on = spin_now
 
     def on_telemetry(self, td: dict) -> None:
         t = {
@@ -432,6 +454,9 @@ class EngineerFeed:
         self.oversteer_events = self.understeer_events = 0
         self.front_locking_events = self.rear_locking_events = 0
         self.kerb_bottoming_events = self.kerb_last_lap = 0
+        self.kerb_spin_events = self.kerb_spin_last_lap = 0
+        self._last_kerb_st = -1e9
+        self._spin_on = False
         self.setup_changed_lap = self.lap_data.get("currentLapNum")
 
     def _record_completed_lap(
@@ -493,6 +518,10 @@ class EngineerFeed:
         self.oversteer_events = 0
         self.understeer_events = 0
         self.kerb_last_lap, self.kerb_bottoming_events = self.kerb_bottoming_events, 0
+        self.kerb_spin_last_lap, self.kerb_spin_events = (
+            self.kerb_spin_events,
+            0,
+        )
 
     def snapshot(self, driver_name: str, session: dict) -> dict:
         """The relay's TelemetrySnapshot for this driver (the engine's input)."""
@@ -516,6 +545,9 @@ class EngineerFeed:
                 # a whole lap's worth: the last completed lap, or this one once it has more
                 "kerbBottomingEvents": max(
                     self.kerb_bottoming_events, self.kerb_last_lap
+                ),
+                "kerbSpinEvents": max(
+                    self.kerb_spin_events, self.kerb_spin_last_lap
                 ),
             },
             "timestamp": self.last_st,
@@ -614,6 +646,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     understeer_count = diag.get("understeerEvents") or 0
     front_lock_count = diag.get("frontLockingEvents") or 0
     kerb_hits = diag.get("kerbBottomingEvents") or 0
+    kerb_spin_hits = diag.get("kerbSpinEvents") or 0
     # Behavioural evidence is useful even when the lap was invalid.
     # Invalid laps must not affect lap-time/pace analysis, but events such
     # as oversteer, understeer still describe the car's
@@ -792,11 +825,19 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
             )
 
     # DIAGNOSTIC 4: Kerb striking & suspension bottoming
-    if "kerb_unstable" in fb or kerb_hits > 3:
+    if "kerb_unstable" in fb or kerb_hits > 3 or kerb_spin_hits > 0:
         issues.append(
             {
-                "title": "Chassis Bottoming on Kerbs",
-                "description": "Suspension too stiff or ride height too low; bottoming out over curbs unsettled the car.",
+                "title": (
+                    "Kerb-Induced Spin from Stiff Suspension"
+                    if kerb_spin_hits > 0 and "kerb_unstable" not in fb
+                    else "Chassis Bottoming on Kerbs"
+                ),
+                "description": (
+                    "Kerb strikes preceded rear-axle rotation; suspension is too stiff or the ride height is too low."
+                    if kerb_spin_hits > 0 and "kerb_unstable" not in fb
+                    else "Suspension too stiff or ride height too low; bottoming out over curbs unsettled the car."
+                ),
                 "severity": "warning",
             }
         )
