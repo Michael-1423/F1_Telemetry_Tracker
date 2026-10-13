@@ -15,6 +15,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from f1live import engineer as E  # noqa: E402
+from f1live import laps as LP  # noqa: E402
 from f1live import packets as P  # noqa: E402
 from f1live.model import Session  # noqa: E402
 
@@ -316,6 +317,58 @@ def test_session_feeds_each_drivers_own_car():
     spectator = blank(P.MOTION, player=255)
     s.handle(spectator, "10.0.0.3:1", 2.1)
     assert set(s.engineers) == {0, 3}
+
+
+def test_corner_profile_captures_brake_steer_and_throttle():
+    trace = {
+        0: (180, 0.0, 0.8, 0.1, 5),
+        1: (150, 0.0, 0.5, 0.4, 4),
+        2: (110, 0.1, 0.2, 0.8, 3),
+        3: (105, 0.2, 0.1, 0.7, 3),
+        4: (120, 0.8, 0.0, 0.5, 3),
+        5: (145, 1.0, 0.0, 0.2, 4),
+    }
+    row = LP.corner_metrics(trace, [(0.0, 180)], [{"name": "C1", "start": 0, "end": 30}])["C1"]
+    assert row["steer_peak"] == 0.8
+    assert row["brake_at_apex"] == 0.1
+    assert row["throttle_at_apex"] == 0.2
+    assert row["trail_braking"] is True
+
+
+def test_engineer_uses_repeated_corner_style_for_setup():
+    setup = {
+        "frontWing": 7, "rearWing": 7, "onThrottleDiff": 60, "offThrottleDiff": 60,
+        "frontCamber": -3.0, "rearCamber": -1.5, "frontToe": 0.05, "rearToe": 0.3,
+        "frontSuspension": 3, "rearSuspension": 3, "frontAntiRollBar": 5,
+        "rearAntiRollBar": 5, "frontRideHeight": 3, "rearRideHeight": 4,
+        "brakePressure": 95, "brakeBias": 55, "frontLeftTyrePressure": 23.0,
+        "frontRightTyrePressure": 23.0, "rearLeftTyrePressure": 21.0,
+        "rearRightTyrePressure": 21.0, "ballast": 5, "fuelLoad": 20.0,
+    }
+    profile = [
+        {"corner": "C1", "laps": 3, "trail_braking_pct": 100, "brake_at_apex": 0.2,
+         "steer_peak": 0.8, "throttle_at_apex": 0.1, "throttle_at": 30},
+        {"corner": "C2", "laps": 3, "trail_braking_pct": 67, "brake_at_apex": 0.2,
+         "steer_peak": 0.7, "throttle_at_apex": 0.1, "throttle_at": 80},
+    ]
+    snapshot = {
+        "driverName": "Tester",
+        "session": {"sessionType": "Practice 1", "sessionTypeId": 1, "totalLaps": 20},
+        "telemetry": {"tyresInnerTemperature": {"fl": 100, "fr": 100, "rl": 100, "rr": 100}},
+        "lapData": {"currentLapNum": 4, "isCurrentLapInvalid": False},
+        "status": {"tyreCompound": "Medium", "fuelRemainingLaps": 10},
+        "damage": {"tyresWear": {"fl": 0, "fr": 0, "rl": 0, "rr": 0}},
+        "diagnostics": {"oversteerEvents": 0, "understeerEvents": 0, "frontLockingEvents": 0},
+        "completedLaps": [],
+        "setup": setup,
+        "cornerProfile": profile,
+    }
+    analysis = E.analyze(snapshot)
+    recs = {r["parameter"]: r for r in analysis["recommendations"]}
+    assert recs["brakeBias"]["recommendedValue"] == 54
+    assert recs["offThrottleDiff"]["recommendedValue"] == 58
+    assert recs["frontWing"]["recommendedValue"] == 8
+    assert analysis["cornerAnalysis"]["trailBrakingPct"] == 83.5
 
 
 def test_high_tyre_wear_feedback_recommends_front_setup_changes():
