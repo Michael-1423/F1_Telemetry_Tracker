@@ -987,26 +987,25 @@ const TEL_READY=`<div class="pwc"><div class="pit-wall-grid">
   <section class="pit-panel pit-wall-tyres" aria-label="Tyres and brakes" id="pwTyres"></section>
   <section class="pit-panel pit-wall-laps" aria-label="Recent laps" id="pwLaps"></section></div></div>`;
 function renderLiveTrace(E){
-  const host=$('reTrace'),trace=(E.car&&E.car.liveTrace)||[],lap=(E.car&&E.car.liveLap)||{};
+  const host=$('reTrace'),trace=(E.car&&E.car.liveTrace)||[],lap=(E.car&&E.car.liveLap)||{},windowSeconds=+lap.traceWindow||8;
   if(!host)return;
   if(trace.length<2){
-    host.innerHTML='<section class="re-trace"><div class="re-trace-h"><h4>Live brake / throttle</h4><span>Waiting for a moving lap trace…</span></div></section>';
+    host.innerHTML='<section class="re-trace"><div class="re-trace-h"><h4>Live brake / throttle</h4><span>Waiting for a moving time window…</span></div></section>';
     return;
   }
   const W=1440,H=300,L=52,R=16,T=22,B=34,iw=W-L-R,ih=H-T-B;
-  const maxD=Math.max(+lap.trackLength||0,trace[trace.length-1].distance,1);
-  const x=d=>L+Math.max(0,Math.min(maxD,+d||0))/maxD*iw;
+  const minT=Math.min(...trace.map(p=>+p.time||0)),maxT=Math.max(0,Math.max(...trace.map(p=>+p.time||0)));
+  const x=t=>L+(Math.max(minT,Math.min(maxT,+t||0))-minT)/Math.max(maxT-minT,0.1)*iw;
   const y=v=>T+(1-Math.max(0,Math.min(1,+v||0)))*ih;
-  const path=k=>trace.map((p,i)=>`${i?'L':'M'}${x(p.distance).toFixed(1)},${y(p[k]).toFixed(1)}`).join(' ');
-  const cursor=x(lap.distance);
+  const path=k=>trace.map((p,i)=>`${i?'L':'M'}${x(p.time).toFixed(1)},${y(p[k]).toFixed(1)}`).join(' ');
   const grid=[0,.25,.5,.75,1].map(v=>`<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-8}" y="${y(v)+3}" text-anchor="end">${Math.round(v*100)}%</text>`).join('');
-  const ticks=[0,.25,.5,.75,1].map(v=>`<text x="${x(maxD*v)}" y="${H-8}" text-anchor="middle">${Math.round(maxD*v)}m</text>`).join('');
+  const ticks=[0,.25,.5,.75,1].map(v=>`<text x="${x(minT+(maxT-minT)*v)}" y="${H-8}" text-anchor="middle">${Math.abs(maxT-(minT+(maxT-minT)*v)).toFixed(1)}s ago</text>`).join('');
   host.innerHTML=`<section class="re-trace" aria-label="Live brake and throttle graph">
-    <div class="re-trace-h"><h4>Live brake / throttle</h4><span>Lap ${lap.number||'–'} · ${Math.round(lap.distance||0)} m · ${lap.invalid?'invalid · ':''}updates in real time</span></div>
-    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Brake and throttle pedal inputs over the current lap">
+    <div class="re-trace-h"><h4>Live brake / throttle · last ${windowSeconds}s</h4><span>Lap ${lap.number||'–'} · ${lap.invalid?'invalid · ':''}rolling time window</span></div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Brake and throttle pedal inputs over the last few seconds">
       ${grid}<line class="axis" x1="${L}" x2="${W-R}" y1="${T+ih}" y2="${T+ih}"/><line class="axis" x1="${L}" x2="${L}" y1="${T}" y2="${T+ih}"/>
       <path class="trace-throttle" d="${path('throttle')}"/><path class="trace-brake" d="${path('brake')}"/>
-      <line class="cursor" x1="${cursor}" x2="${cursor}" y1="${T}" y2="${T+ih}"/>${ticks}
+      ${ticks}
     </svg><div class="legend"><span class="th"><b>Throttle</b></span><span class="br"><b>Brake</b></span><span class="muted">distance from start/finish</span></div>
   </section>`;
 }
