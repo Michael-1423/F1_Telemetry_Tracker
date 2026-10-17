@@ -1666,16 +1666,15 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
             snap["drivingStyle"] = s.style_metrics(c)
             # Keep the in-progress 5 m trace separate from completed-lap analysis so the
             # engineer view can plot pedal inputs before the lap is closed.
+            trace = list(c.live_pedal_trace)
+            end_time = trace[-1][0] if trace else 0.0
             snap["liveTrace"] = [
                 {
-                    "distance": round(bin_no * 5.0, 1),
-                    "speed": row[0],
-                    "throttle": row[1],
-                    "brake": row[2],
-                    "steer": row[3],
-                    "gear": row[4],
+                    "time": round(st - end_time, 2),
+                    "throttle": throttle,
+                    "brake": brake,
                 }
-                for bin_no, row in sorted(c.cur_trace.items())
+                for st, throttle, brake in trace
             ]
             snap["liveLap"] = {
                 "number": c.lap_num,
@@ -1683,6 +1682,7 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
                 "time": round(float(c.lap.get("currentLapTime", 0.0) or 0.0), 3),
                 "trackLength": round(float(s.track_length or 0.0), 1),
                 "invalid": bool(c.lap.get("currentLapInvalid")),
+                "traceWindow": 8,
             }
             snap["diagnostics"]["spinEvents"] = c.counts.get("spins", 0)
         by_name[name.lower()] = dict(row, snapshot=snap)
