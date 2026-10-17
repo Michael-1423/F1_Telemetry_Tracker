@@ -1567,6 +1567,26 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
         if snap is not None:
             snap["cornerProfile"] = s.corner_profile(c)
             snap["drivingStyle"] = s.style_metrics(c)
+            # Keep the in-progress 5 m trace separate from completed-lap analysis so the
+            # engineer view can plot pedal inputs before the lap is closed.
+            snap["liveTrace"] = [
+                {
+                    "distance": round(bin_no * 5.0, 1),
+                    "speed": row[0],
+                    "throttle": row[1],
+                    "brake": row[2],
+                    "steer": row[3],
+                    "gear": row[4],
+                }
+                for bin_no, row in sorted(c.cur_trace.items())
+            ]
+            snap["liveLap"] = {
+                "number": c.lap_num,
+                "distance": round(float(c.lap.get("lapDistance", 0.0) or 0.0), 1),
+                "time": round(float(c.lap.get("currentLapTime", 0.0) or 0.0), 3),
+                "trackLength": round(float(s.track_length or 0.0), 1),
+                "invalid": bool(c.lap.get("currentLapInvalid")),
+            }
         by_name[name.lower()] = dict(row, snapshot=snap)
     return roster, by_name
 
@@ -1605,6 +1625,8 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
         ),
         "recentLaps": laps[-5:],
         "setupChangedLap": snap.get("setupChangedLap"),
+        "liveTrace": snap.get("liveTrace", []),
+        "liveLap": snap.get("liveLap", {}),
     }
     if snap["setup"]:
         try:

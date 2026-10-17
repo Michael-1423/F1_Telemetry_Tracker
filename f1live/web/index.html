@@ -325,6 +325,20 @@ body.eng-dark .msgbox .muted{color:#a3a3a3}
 .re-track{position:relative;height:.75rem;width:100%;background:#262626;border-radius:999px;overflow:hidden}
 .re-track .mid{position:absolute;left:50%;top:0;bottom:0;width:.125rem;background:#737373;z-index:1}
 .re-track .fill{position:absolute;top:0;bottom:0;transition:all .3s}
+.re-trace{background:#0a0a0a;padding:1rem;border-radius:.75rem;border:1px solid #262626;display:grid;gap:.625rem}
+.re-trace-h{display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+.re-trace-h h4{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:#d4d4d4}
+.re-trace-h span{font-size:10px;color:#737373;text-align:right}
+.re-trace svg{display:block;width:100%;height:auto;overflow:visible}
+.re-trace .grid{stroke:#262626;stroke-width:1}
+.re-trace .axis{stroke:#525252;stroke-width:1}
+.re-trace .trace-throttle{fill:none;stroke:#22d3ee;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.re-trace .trace-brake{fill:none;stroke:#f87171;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.re-trace .cursor{stroke:#fbbf24;stroke-width:1.5;stroke-dasharray:3 3}
+.re-trace text{font:10px var(--mono);fill:#737373}
+.re-trace .legend{display:flex;gap:1rem;padding:0;font-size:10px}
+.re-trace .legend b{font-weight:700}
+.re-trace .legend .th{color:#22d3ee}.re-trace .legend .br{color:#f87171}
 .re-issues{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem;padding-top:.5rem;border-top:1px solid rgba(38,38,38,.8)}
 .re-issue{font-size:.75rem;padding:.625rem;border-radius:.25rem;background:#171717;border:1px solid #262626;display:flex;align-items:flex-start;gap:.5rem}
 .re-issue svg{margin-top:.125rem}
@@ -903,7 +917,7 @@ const ICON={
   check:SVG('<path d="M20 6 9 17l-5-5"/>'),
 };
 const RE_READY=`<div class="re"><div class="re-grid">
-  <div class="re-col"><section class="re-brief" id="reBrief" aria-labelledby="reHead"></section><div class="re-card" id="reBal"></div><div id="reFb"></div></div>
+  <div class="re-col"><section class="re-brief" id="reBrief" aria-labelledby="reHead"></section><div class="re-card" id="reBal"></div><div id="reTrace"></div><div id="reFb"></div></div>
   <div class="re-col re-right"><div class="re-tabs" id="reTabs"></div><div class="re-body" id="reBody"></div></div></div></div>`;
 const SHEET=[['1. Aerodynamics','1 - 11',[['frontWing','Front Wing Aero',''],['rearWing','Rear Wing Aero','']]],
   ['2. Transmission','50% - 100%',[['onThrottleDiff','Diff On-Throttle','%'],['offThrottleDiff','Diff Off-Throttle','%']]],
@@ -949,6 +963,7 @@ function renderEngineer(){
     <div><div class="re-scale"><span style="color:#f87171">OVERSTEER (-10)</span><span style="color:#34d399">BALANCED (0)</span><span style="color:#fbbf24">UNDERSTEER (+10)</span></div>
       <div class="re-track" role="img" aria-label="Balance ${sc}, from −10 oversteer to +10 understeer"><i class="mid"></i><i class="fill" style="background:${sc<0?'#ef4444':'#f59e0b'};left:${sc<0?50+sc*5:50}%;width:${Math.abs(sc)*5}%"></i></div></div>
     ${A.diagnosedIssues.length?`<div class="re-issues">${A.diagnosedIssues.map(i=>`<div class="re-issue">${ICON.shield.replace('<svg',`<svg style="color:${i.severity==='danger'?'#f87171':i.severity==='warning'?'#fbbf24':'#22d3ee'}"`)}<div><b>${esc(i.title)}</b><span>${esc(i.description)}</span></div></div>`).join('')}</div>`:''}`);
+  renderLiveTrace(E);
   put('reFb',`<div class="re-fbh"><h4>${ICON.sliders} Driver Handling Feedback</h4><span>Select what you feel to fine-tune setup clicks</span></div>
     <div class="re-fbgrid">${E.options.map(o=>`<button type="button" class="re-fb" data-fb="${esc(o.id)}" aria-pressed="${engFb.includes(o.id)}" title="${esc(o.description)}"><b>${esc(o.label)}</b><span>${esc(o.description)}</span></button>`).join('')}</div>`);
   const recs=A.recommendations,copied=Date.now()<copiedUntil;
@@ -969,6 +984,30 @@ const TEL_READY=`<div class="pwc"><div class="pit-wall-grid">
   <section class="pit-panel pit-wall-car" aria-label="Live car telemetry" id="pwCar"></section>
   <section class="pit-panel pit-wall-tyres" aria-label="Tyres and brakes" id="pwTyres"></section>
   <section class="pit-panel pit-wall-laps" aria-label="Recent laps" id="pwLaps"></section></div></div>`;
+function renderLiveTrace(E){
+  const host=$('reTrace'),trace=(E.car&&E.car.liveTrace)||[],lap=(E.car&&E.car.liveLap)||{};
+  if(!host)return;
+  if(trace.length<2){
+    host.innerHTML='<section class="re-trace"><div class="re-trace-h"><h4>Live brake / throttle</h4><span>Waiting for a moving lap trace…</span></div></section>';
+    return;
+  }
+  const W=720,H=220,L=42,R=12,T=18,B=28,iw=W-L-R,ih=H-T-B;
+  const maxD=Math.max(+lap.trackLength||0,trace[trace.length-1].distance,1);
+  const x=d=>L+Math.max(0,Math.min(maxD,+d||0))/maxD*iw;
+  const y=v=>T+(1-Math.max(0,Math.min(1,+v||0)))*ih;
+  const path=k=>trace.map((p,i)=>`${i?'L':'M'}${x(p.distance).toFixed(1)},${y(p[k]).toFixed(1)}`).join(' ');
+  const cursor=x(lap.distance);
+  const grid=[0,.25,.5,.75,1].map(v=>`<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-8}" y="${y(v)+3}" text-anchor="end">${Math.round(v*100)}%</text>`).join('');
+  const ticks=[0,.25,.5,.75,1].map(v=>`<text x="${x(maxD*v)}" y="${H-8}" text-anchor="middle">${Math.round(maxD*v)}m</text>`).join('');
+  host.innerHTML=`<section class="re-trace" aria-label="Live brake and throttle graph">
+    <div class="re-trace-h"><h4>Live brake / throttle</h4><span>Lap ${lap.number||'–'} · ${Math.round(lap.distance||0)} m · ${lap.invalid?'invalid · ':''}updates in real time</span></div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Brake and throttle pedal inputs over the current lap">
+      ${grid}<line class="axis" x1="${L}" x2="${W-R}" y1="${T+ih}" y2="${T+ih}"/><line class="axis" x1="${L}" x2="${L}" y1="${T}" y2="${T+ih}"/>
+      <path class="trace-throttle" d="${path('throttle')}"/><path class="trace-brake" d="${path('brake')}"/>
+      <line class="cursor" x1="${cursor}" x2="${cursor}" y1="${T}" y2="${T+ih}"/>${ticks}
+    </svg><div class="legend"><span class="th"><b>Throttle</b></span><span class="br"><b>Brake</b></span><span class="muted">distance from start/finish</span></div>
+  </section>`;
+}
 // My telemetry: the original's PitWallOverview, panel for panel, with the dial.
 const pwTime=s=>!s||s<0?'--:--.---':`${Math.floor(s/60)}:${(s%60).toFixed(3).padStart(6,'0')}`;
 // Dial: speed on the outer ring (0-360 km/h over 270°), throttle up the left and brake up the right
