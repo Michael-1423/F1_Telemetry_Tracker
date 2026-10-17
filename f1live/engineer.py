@@ -1408,9 +1408,8 @@ def session_briefing(
     kind = _session_kind(snapshot)
     driver = snapshot.get("driverName") or "Driver"
     setup_action = (
-        f"{top['label']} {'+' if top['delta'] > 0 else ''}{_num(top['delta'])} {
-            top['unit']
-        }"
+        f"{top['label']} {'+' if top['delta'] > 0 else ''}{_num(top['delta'])} "
+        f"{top['unit']}"
         if top
         else "keep the current setup"
     )
@@ -1421,9 +1420,8 @@ def session_briefing(
             0, 2 - len([l for l in snapshot["completedLaps"] if l["isValid"]])
         )
         pit_call = (
-            f"Stay out for {clean_laps_needed} clean {
-                'lap' if clean_laps_needed == 1 else 'laps'
-            }"
+            f"Stay out for {clean_laps_needed} clean "
+            f"{'lap' if clean_laps_needed == 1 else 'laps'}"
             if clean_laps_needed > 0
             else "Box when ready to compare setup"
         )
@@ -1499,9 +1497,10 @@ def session_briefing(
                     if window_start == window_end
                     else f"Pit window: laps {window_start}–{window_end}"
                 )
-            pit_reason = f"{_round(wear)}% wear, rising about {
-                _to_fixed(wear_per_lap, 1)
-            }% per lap"
+            pit_reason = (
+                f"{_round(wear)}% wear, rising about "
+                f"{_to_fixed(wear_per_lap, 1)}% per lap"
+            )
 
         tyre_call = _next_race_compound(snapshot, laps_remaining)
         fuel_delta = snapshot["status"]["fuelRemainingLaps"] - laps_remaining
