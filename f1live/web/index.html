@@ -325,6 +325,7 @@ body.eng-dark .msgbox .muted{color:#a3a3a3}
 .re-track{position:relative;height:.75rem;width:100%;background:#262626;border-radius:999px;overflow:hidden}
 .re-track .mid{position:absolute;left:50%;top:0;bottom:0;width:.125rem;background:#737373;z-index:1}
 .re-track .fill{position:absolute;top:0;bottom:0;transition:all .3s}
+.re-trace-wide{margin-top:1rem}
 .re-trace{background:#0a0a0a;padding:1rem;border-radius:.75rem;border:1px solid #262626;display:grid;gap:.625rem}
 .re-trace-h{display:flex;align-items:center;justify-content:space-between;gap:.75rem}
 .re-trace-h h4{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:#d4d4d4}
@@ -917,8 +918,9 @@ const ICON={
   check:SVG('<path d="M20 6 9 17l-5-5"/>'),
 };
 const RE_READY=`<div class="re"><div class="re-grid">
-  <div class="re-col"><section class="re-brief" id="reBrief" aria-labelledby="reHead"></section><div class="re-card" id="reBal"></div><div id="reTrace"></div><div id="reFb"></div></div>
-  <div class="re-col re-right"><div class="re-tabs" id="reTabs"></div><div class="re-body" id="reBody"></div></div></div></div>`;
+  <div class="re-col"><section class="re-brief" id="reBrief" aria-labelledby="reHead"></section><div class="re-card" id="reBal"></div><div id="reFb"></div></div>
+  <div class="re-col re-right"><div class="re-tabs" id="reTabs"></div><div class="re-body" id="reBody"></div></div></div>
+  <div id="reTrace" class="re-trace-wide"></div></div>`;
 const SHEET=[['1. Aerodynamics','1 - 11',[['frontWing','Front Wing Aero',''],['rearWing','Rear Wing Aero','']]],
   ['2. Transmission','50% - 100%',[['onThrottleDiff','Diff On-Throttle','%'],['offThrottleDiff','Diff Off-Throttle','%']]],
   ['3. Suspension Geometry','',[['frontCamber','Front Camber','°'],['rearCamber','Rear Camber','°'],['frontToe','Front Toe-out','°'],['rearToe','Rear Toe-in','°']]],
@@ -991,7 +993,7 @@ function renderLiveTrace(E){
     host.innerHTML='<section class="re-trace"><div class="re-trace-h"><h4>Live brake / throttle</h4><span>Waiting for a moving lap trace…</span></div></section>';
     return;
   }
-  const W=720,H=220,L=42,R=12,T=18,B=28,iw=W-L-R,ih=H-T-B;
+  const W=1440,H=300,L=52,R=16,T=22,B=34,iw=W-L-R,ih=H-T-B;
   const maxD=Math.max(+lap.trackLength||0,trace[trace.length-1].distance,1);
   const x=d=>L+Math.max(0,Math.min(maxD,+d||0))/maxD*iw;
   const y=v=>T+(1-Math.max(0,Math.min(1,+v||0)))*ih;

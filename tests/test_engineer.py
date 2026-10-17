@@ -371,6 +371,34 @@ def test_engineer_uses_repeated_corner_style_for_setup():
     assert analysis["cornerAnalysis"]["trailBrakingPct"] == 83.5
 
 
+def test_engineer_uses_aggregate_driving_style_for_setup():
+    with open(GOLDEN, encoding="utf-8") as f:
+        snapshot = json.load(f)["cases"][0]["snapshot"]
+
+    snapshot["drivingStyle"] = {
+        "samples": 100,
+        "full_throttle_pct": 50.0,
+        "partial_throttle_pct": 25.0,
+        "coasting_pct": 10.0,
+        "braking_pct": 25.0,
+        "partial_brake_pct": 60.0,
+        "mean_brake_pct": 70.0,
+        "trail_brake_pct": 50.0,
+        "full_lock_pct": 5.0,
+        "steer_snaps_pct": 0.5,
+        "lockups": 0,
+        "wheelspin": 3,
+    }
+    snapshot["diagnostics"].update(oversteerEvents=0, understeerEvents=0)
+    snapshot["cornerProfile"] = []
+
+    result = E.analyze(snapshot)
+    recs = {r["parameter"]: r for r in result["recommendations"]}
+
+    assert recs["onThrottleDiff"]["recommendedValue"] == 55
+    assert recs["brakeBias"]["recommendedValue"] == 59
+
+
 def test_high_tyre_wear_feedback_recommends_front_setup_changes():
     snapshot = {
         "completedLaps": [
@@ -533,6 +561,29 @@ def test_invalid_lap_behaviour_influences_setup_recommendation():
     snapshot["diagnostics"]["oversteerEvents"] = 0
     snapshot["diagnostics"]["understeerEvents"] = 0
     snapshot["diagnostics"]["kerbBottomingEvents"] = 0
+
+    result = E.analyze(snapshot)
+
+    assert any(
+        rec["parameter"] == "onThrottleDiff" for rec in result["recommendations"]
+    )
+
+
+def test_spin_events_influence_setup_recommendation():
+    with open(GOLDEN, encoding="utf-8") as f:
+        snapshot = json.load(f)["cases"][0]["snapshot"]
+
+    snapshot["telemetry"]["tyresInnerTemperature"] = {
+        "fl": 100,
+        "fr": 100,
+        "rl": 100,
+        "rr": 100,
+    }
+    snapshot["diagnostics"].update(
+        oversteerEvents=0,
+        understeerEvents=0,
+        spinEvents=1,
+    )
 
     result = E.analyze(snapshot)
 

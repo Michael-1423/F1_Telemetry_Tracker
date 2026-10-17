@@ -663,6 +663,84 @@ def _corner_style_recommendations(
     return out
 
 
+def _driving_style_recommendations(
+    target: dict, style: dict, oversteer_count: int, understeer_count: int
+) -> list[dict]:
+    """Turn aggregate driving habits into bounded setup changes."""
+    if (style.get("samples") or 0) < 40:
+        return []
+
+    out: list[dict] = []
+
+    def add(category, parameter, label, old, new, unit, reason, priority):
+        if new == old:
+            return
+        target[parameter] = new
+        out.append({
+            "category": category, "parameter": parameter, "label": label,
+            "current": old, "recommended": new, "delta": new - old,
+            "unit": unit, "reason": reason, "priority": priority,
+        })
+
+    lockups = style.get("lockups") or 0
+    if lockups >= 2 and target["brakePressure"] > 88:
+        old = target["brakePressure"]
+        add(
+            "Brakes", "brakePressure", "Brake Pressure", old, max(88, old - 2), "%",
+            f"This driver recorded {lockups} front lockups; reducing pressure preserves tyre rotation at the end of braking.",
+            "Medium",
+        )
+
+    trail = style.get("trail_brake_pct") or 0
+    partial_brake = style.get("partial_brake_pct") or 0
+    if trail >= 45 and partial_brake >= 55 and target["brakeBias"] > 50:
+        old = target["brakeBias"]
+        add(
+            "Brakes", "brakeBias", "Front Brake Bias", old, max(50, old - 1), "%",
+            "This driver carries meaningful partial brake pressure while steering; one click rearward keeps the front axle available for rotation.",
+            "Medium",
+        )
+
+    full_lock = style.get("full_lock_pct") or 0
+    steer_snaps = style.get("steer_snaps_pct") or 0
+    if full_lock >= 12 or steer_snaps >= 2:
+        if target["frontWing"] < 11:
+            old = target["frontWing"]
+            add(
+                "Aerodynamics", "frontWing", "Front Wing Aero", old, old + 1, "clicks",
+                "Frequent high steering lock or steering corrections show that this driver benefits from more predictable front-end support.",
+                "Low",
+            )
+        if target["frontAntiRollBar"] > 2:
+            old = target["frontAntiRollBar"]
+            add(
+                "Suspension", "frontAntiRollBar", "Front Anti-Roll Bar", old, old - 1, "clicks",
+                "Softening the front axle gives this high-input driving style more mechanical grip and reduces steering corrections.",
+                "Low",
+            )
+
+    early_throttle = (style.get("full_throttle_pct") or 0) >= 45
+    wheelspin = style.get("wheelspin") or 0
+    if early_throttle and (wheelspin >= 2 or oversteer_count > understeer_count):
+        if target["onThrottleDiff"] > 50:
+            old = target["onThrottleDiff"]
+            add(
+                "Transmission", "onThrottleDiff", "On-Throttle Differential", old,
+                max(50, old - 3), "%",
+                "This driver gets back to full throttle early while the rear is still loaded; opening the differential smooths traction on corner exit.",
+                "Medium",
+            )
+        if target["rearAntiRollBar"] > 2:
+            old = target["rearAntiRollBar"]
+            add(
+                "Suspension", "rearAntiRollBar", "Rear Anti-Roll Bar", old, old - 1, "clicks",
+                "A softer rear axle supports this early-throttle style and helps the driven tyres maintain traction.",
+                "Low",
+            )
+
+    return out
+
+
 # ------------------------------------------------------------------------------------ setup engine
 def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     """analyzeTelemetryAndGenerateSetup(snapshot, activeFeedback) from engineer_engine.ts."""
@@ -703,6 +781,8 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     understeer_count = diag.get("understeerEvents") or 0
     front_lock_count = diag.get("frontLockingEvents") or 0
     kerb_hits = diag.get("kerbBottomingEvents") or 0
+    spin_events = diag.get("spinEvents") or 0
+    oversteer_count += spin_events * 3
     # Behavioural evidence is useful even when the lap was invalid.
     # Invalid laps must not affect lap-time/pace analysis, but events such
     # as oversteer, understeer still describe the car's
@@ -1298,6 +1378,22 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
             recommendation["priority"],
         )
 
+    aggregate_style_recommendations = _driving_style_recommendations(
+        target, snapshot.get("drivingStyle") or {}, oversteer_count, understeer_count
+    )
+    existing_parameters = {r["parameter"] for r in recommendations}
+    for recommendation in aggregate_style_recommendations:
+        if recommendation["parameter"] in existing_parameters:
+            continue
+        rec(
+            recommendation["category"], recommendation["parameter"],
+            recommendation["label"], recommendation["current"],
+            recommendation["recommended"], recommendation["delta"],
+            recommendation["unit"], recommendation["reason"],
+            recommendation["priority"],
+        )
+        existing_parameters.add(recommendation["parameter"])
+
     if corner_profile:
         result_style = _corner_style_summary(corner_profile)
     else:
@@ -1325,6 +1421,8 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
         "diagnosedIssues": issues,
         "targetSetup": target,
     }
+    if snapshot.get("drivingStyle"):
+        result["drivingStyle"] = snapshot["drivingStyle"]
     if result_style:
         result["cornerAnalysis"] = result_style
     return result
@@ -1586,6 +1684,7 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
                 "trackLength": round(float(s.track_length or 0.0), 1),
                 "invalid": bool(c.lap.get("currentLapInvalid")),
             }
+            snap["diagnostics"]["spinEvents"] = c.counts.get("spins", 0)
         by_name[name.lower()] = dict(row, snapshot=snap)
     return roster, by_name
 
