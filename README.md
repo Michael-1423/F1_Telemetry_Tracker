@@ -36,9 +36,10 @@ Plus a few lobby jokes. **Hammer Time** turns them off when things get serious.
    UDP Telemetry **On**, UDP IP Address **the host's IP**, Port **20777**, Send Rate **20 Hz**,
    Format **2020**, Your Telemetry **Public**.
 
-3. **Practice**: open the **Engineer** tab and pick your name. Tick what the car feels like, apply the
-   suggested changes, and use **Copy Full Setup** for the garage. Switch to **My telemetry** to watch
-   your own car.
+3. **Practice**: open the **Engineer** tab and pick your name. The engineer combines repeated
+   corner-by-corner braking, steering and throttle traces with wheel-slip and temperature evidence
+   to tailor setup changes to your driving style. Tick what the car feels like, apply the suggested
+   changes, and use **Copy Full Setup** for the garage. Switch to **My telemetry** to watch your own car.
 
 4. **Qualifying and race**: watch the **Pit wall**. Press **F** (or *Flag incident*) to mark a moment
    for the race report.

@@ -574,6 +574,173 @@ def _num(x: float) -> str:
     return repr(float(x))
 
 
+def _corner_style_summary(profile: list[dict]) -> dict:
+    """Summarize the driver's repeated braking, steering and throttle technique."""
+    rows = [r for r in profile if (r.get("laps") or 0) >= 1]
+    if not rows:
+        return {}
+
+    def mean(key: str) -> float | None:
+        values = [r[key] for r in rows if r.get(key) is not None]
+        return round(sum(values) / len(values), 1) if values else None
+
+    return {
+        "corners": len(rows),
+        "laps": max((r.get("laps") or 0) for r in rows),
+        "trailBrakingPct": mean("trail_braking_pct"),
+        "steeringPeak": mean("steer_peak"),
+        "brakeAtApex": mean("brake_at_apex"),
+        "throttleAtApex": mean("throttle_at_apex"),
+        "throttleApplicationDistance": mean("throttle_at"),
+    }
+
+
+def _corner_style_recommendations(
+    target: dict, profile: list[dict], oversteer_count: int, understeer_count: int
+) -> list[dict]:
+    """Turn consistent corner technique into small, explainable setup changes."""
+    rows = [r for r in profile if (r.get("laps") or 0) >= 2]
+    if len(rows) < 2:
+        return []
+
+    def average(key: str) -> float | None:
+        values = [float(r[key]) for r in rows if r.get(key) is not None]
+        return sum(values) / len(values) if values else None
+
+    trail = average("trail_braking_pct")
+    brake_apex = average("brake_at_apex")
+    steer_peak = average("steer_peak")
+    throttle_apex = average("throttle_at_apex")
+    out: list[dict] = []
+
+    def add(category, parameter, label, old, new, unit, reason, priority):
+        if new == old:
+            return
+        target[parameter] = new
+        out.append({
+            "category": category, "parameter": parameter, "label": label,
+            "current": old, "recommended": new, "delta": new - old,
+            "unit": unit, "reason": reason, "priority": priority,
+        })
+
+    if (trail or 0) >= 35 and (brake_apex or 0) >= 0.15:
+        if target["brakeBias"] > 50:
+            old = target["brakeBias"]
+            add("Brakes", "brakeBias", "Front Brake Bias", old, max(50, old - 1), "%",
+                "This driver consistently trail-brakes into the apex; moving one click rearward keeps the front tyres available for steering while braking.",
+                "Medium")
+        if target["offThrottleDiff"] > 50:
+            old = target["offThrottleDiff"]
+            add("Transmission", "offThrottleDiff", "Off-Throttle Differential", old,
+                max(50, old - 2), "%",
+                "Supports the driver's brake-to-steer technique by allowing more rotation as brake pressure is released.",
+                "Low")
+
+    if (steer_peak or 0) >= 0.65 and (throttle_apex or 0) < 0.25 and understeer_count >= oversteer_count:
+        if target["frontWing"] < 11:
+            old = target["frontWing"]
+            add("Aerodynamics", "frontWing", "Front Wing Aero", old, old + 1, "clicks",
+                "Repeated high steering demand and low apex throttle show that this driver needs more front-end support through the corner.",
+                "Medium")
+        if target["frontAntiRollBar"] > 2:
+            old = target["frontAntiRollBar"]
+            add("Suspension", "frontAntiRollBar", "Front Anti-Roll Bar", old, old - 1, "clicks",
+                "Softens the front axle for the driver's high steering-load cornering style and improves mechanical grip at the apex.",
+                "Low")
+
+    if (throttle_apex or 0) >= 0.35 and (steer_peak or 0) >= 0.45 and oversteer_count > understeer_count:
+        if target["onThrottleDiff"] > 50:
+            old = target["onThrottleDiff"]
+            add("Transmission", "onThrottleDiff", "On-Throttle Differential", old,
+                max(50, old - 3), "%",
+                "This driver applies throttle before the steering is unwound; opening the diff gives the rear tyres a smoother torque split on corner exit.",
+                "Medium")
+        if target["rearAntiRollBar"] > 2:
+            old = target["rearAntiRollBar"]
+            add("Suspension", "rearAntiRollBar", "Rear Anti-Roll Bar", old, old - 1, "clicks",
+                "Adds rear compliance for an early-throttle exit style and helps the driven tyres keep traction while steering is still loaded.",
+                "Low")
+    return out
+
+
+def _driving_style_recommendations(
+    target: dict, style: dict, oversteer_count: int, understeer_count: int
+) -> list[dict]:
+    """Turn aggregate driving habits into bounded setup changes."""
+    if (style.get("samples") or 0) < 40:
+        return []
+
+    out: list[dict] = []
+
+    def add(category, parameter, label, old, new, unit, reason, priority):
+        if new == old:
+            return
+        target[parameter] = new
+        out.append({
+            "category": category, "parameter": parameter, "label": label,
+            "current": old, "recommended": new, "delta": new - old,
+            "unit": unit, "reason": reason, "priority": priority,
+        })
+
+    lockups = style.get("lockups") or 0
+    if lockups >= 2 and target["brakePressure"] > 88:
+        old = target["brakePressure"]
+        add(
+            "Brakes", "brakePressure", "Brake Pressure", old, max(88, old - 2), "%",
+            f"This driver recorded {lockups} front lockups; reducing pressure preserves tyre rotation at the end of braking.",
+            "Medium",
+        )
+
+    trail = style.get("trail_brake_pct") or 0
+    partial_brake = style.get("partial_brake_pct") or 0
+    if trail >= 45 and partial_brake >= 55 and target["brakeBias"] > 50:
+        old = target["brakeBias"]
+        add(
+            "Brakes", "brakeBias", "Front Brake Bias", old, max(50, old - 1), "%",
+            "This driver carries meaningful partial brake pressure while steering; one click rearward keeps the front axle available for rotation.",
+            "Medium",
+        )
+
+    full_lock = style.get("full_lock_pct") or 0
+    steer_snaps = style.get("steer_snaps_pct") or 0
+    if full_lock >= 12 or steer_snaps >= 2:
+        if target["frontWing"] < 11:
+            old = target["frontWing"]
+            add(
+                "Aerodynamics", "frontWing", "Front Wing Aero", old, old + 1, "clicks",
+                "Frequent high steering lock or steering corrections show that this driver benefits from more predictable front-end support.",
+                "Low",
+            )
+        if target["frontAntiRollBar"] > 2:
+            old = target["frontAntiRollBar"]
+            add(
+                "Suspension", "frontAntiRollBar", "Front Anti-Roll Bar", old, old - 1, "clicks",
+                "Softening the front axle gives this high-input driving style more mechanical grip and reduces steering corrections.",
+                "Low",
+            )
+
+    early_throttle = (style.get("full_throttle_pct") or 0) >= 45
+    wheelspin = style.get("wheelspin") or 0
+    if early_throttle and (wheelspin >= 2 or oversteer_count > understeer_count):
+        if target["onThrottleDiff"] > 50:
+            old = target["onThrottleDiff"]
+            add(
+                "Transmission", "onThrottleDiff", "On-Throttle Differential", old,
+                max(50, old - 3), "%",
+                "This driver gets back to full throttle early while the rear is still loaded; opening the differential smooths traction on corner exit.",
+                "Medium",
+            )
+        if target["rearAntiRollBar"] > 2:
+            old = target["rearAntiRollBar"]
+            add(
+                "Suspension", "rearAntiRollBar", "Rear Anti-Roll Bar", old, old - 1, "clicks",
+                "A softer rear axle supports this early-throttle style and helps the driven tyres maintain traction.",
+                "Low",
+            )
+
+    return out
+
+
 # ------------------------------------------------------------------------------------ setup engine
 def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     """analyzeTelemetryAndGenerateSetup(snapshot, activeFeedback) from engineer_engine.ts."""
@@ -614,6 +781,8 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     understeer_count = diag.get("understeerEvents") or 0
     front_lock_count = diag.get("frontLockingEvents") or 0
     kerb_hits = diag.get("kerbBottomingEvents") or 0
+    spin_events = diag.get("spinEvents") or 0
+    oversteer_count += spin_events * 3
     # Behavioural evidence is useful even when the lap was invalid.
     # Invalid laps must not affect lap-time/pace analysis, but events such
     # as oversteer, understeer still describe the car's
@@ -631,6 +800,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
         understeer_count += lap.get("understeerEvents", 0) or 0
 
     balance = 0  # negative = oversteer, positive = understeer
+    corner_profile = snapshot.get("cornerProfile") or snapshot.get("corner_profile") or []
 
     # 1. Oversteer vs understeer balance
     if oversteer_count > understeer_count + 2 or "oversteer_exit" in fb:
@@ -1192,6 +1362,43 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
                 "Medium",
             )
 
+    # DIAGNOSTIC 9: Driver-specific corner technique. These recommendations are
+    # deliberately based on repeated corner profiles, not a single telemetry frame.
+    # They complement the car-balance detectors above so the setup follows how this
+    # driver actually brakes, turns and applies throttle.
+    style_recommendations = _corner_style_recommendations(
+        target, corner_profile, oversteer_count, understeer_count
+    )
+    for recommendation in style_recommendations:
+        rec(
+            recommendation["category"], recommendation["parameter"],
+            recommendation["label"], recommendation["current"],
+            recommendation["recommended"], recommendation["delta"],
+            recommendation["unit"], recommendation["reason"],
+            recommendation["priority"],
+        )
+
+    aggregate_style_recommendations = _driving_style_recommendations(
+        target, snapshot.get("drivingStyle") or {}, oversteer_count, understeer_count
+    )
+    existing_parameters = {r["parameter"] for r in recommendations}
+    for recommendation in aggregate_style_recommendations:
+        if recommendation["parameter"] in existing_parameters:
+            continue
+        rec(
+            recommendation["category"], recommendation["parameter"],
+            recommendation["label"], recommendation["current"],
+            recommendation["recommended"], recommendation["delta"],
+            recommendation["unit"], recommendation["reason"],
+            recommendation["priority"],
+        )
+        existing_parameters.add(recommendation["parameter"])
+
+    if corner_profile:
+        result_style = _corner_style_summary(corner_profile)
+    else:
+        result_style = None
+
     label = "Balanced / Neutral"
     if balance <= -5:
         label = "Heavy Oversteer"
@@ -1205,7 +1412,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     briefing = session_briefing(
         snapshot, label, recommendations[0] if recommendations else None
     )
-    return {
+    result = {
         "radioMessage": briefing["radioMessage"],
         "briefing": briefing,
         "balanceScore": max(-10, min(10, balance)),
@@ -1214,6 +1421,11 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
         "diagnosedIssues": issues,
         "targetSetup": target,
     }
+    if snapshot.get("drivingStyle"):
+        result["drivingStyle"] = snapshot["drivingStyle"]
+    if result_style:
+        result["cornerAnalysis"] = result_style
+    return result
 
 
 # ---------------------------------------------------------------------------------------- strategy
@@ -1294,9 +1506,8 @@ def session_briefing(
     kind = _session_kind(snapshot)
     driver = snapshot.get("driverName") or "Driver"
     setup_action = (
-        f"{top['label']} {'+' if top['delta'] > 0 else ''}{_num(top['delta'])} {
-            top['unit']
-        }"
+        f"{top['label']} {'+' if top['delta'] > 0 else ''}{_num(top['delta'])} "
+        f"{top['unit']}"
         if top
         else "keep the current setup"
     )
@@ -1307,9 +1518,8 @@ def session_briefing(
             0, 2 - len([l for l in snapshot["completedLaps"] if l["isValid"]])
         )
         pit_call = (
-            f"Stay out for {clean_laps_needed} clean {
-                'lap' if clean_laps_needed == 1 else 'laps'
-            }"
+            f"Stay out for {clean_laps_needed} clean "
+            f"{'lap' if clean_laps_needed == 1 else 'laps'}"
             if clean_laps_needed > 0
             else "Box when ready to compare setup"
         )
@@ -1385,9 +1595,10 @@ def session_briefing(
                     if window_start == window_end
                     else f"Pit window: laps {window_start}–{window_end}"
                 )
-            pit_reason = f"{_round(wear)}% wear, rising about {
-                _to_fixed(wear_per_lap, 1)
-            }% per lap"
+            pit_reason = (
+                f"{_round(wear)}% wear, rising about "
+                f"{_to_fixed(wear_per_lap, 1)}% per lap"
+            )
 
         tyre_call = _next_race_compound(snapshot, laps_remaining)
         fuel_delta = snapshot["status"]["fuelRemainingLaps"] - laps_remaining
@@ -1449,9 +1660,32 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
             "setup": bool(feed and feed.setup),
         }
         roster.append(row)
-        by_name[name.lower()] = dict(
-            row, snapshot=feed.snapshot(name, sess) if feed else None
-        )
+        snap = feed.snapshot(name, sess) if feed else None
+        if snap is not None:
+            snap["cornerProfile"] = s.corner_profile(c)
+            snap["drivingStyle"] = s.style_metrics(c)
+            # Keep the in-progress 5 m trace separate from completed-lap analysis so the
+            # engineer view can plot pedal inputs before the lap is closed.
+            trace = list(c.live_pedal_trace)
+            end_time = trace[-1][0] if trace else 0.0
+            snap["liveTrace"] = [
+                {
+                    "time": round(st - end_time, 2),
+                    "throttle": throttle,
+                    "brake": brake,
+                }
+                for st, throttle, brake in trace
+            ]
+            snap["liveLap"] = {
+                "number": c.lap_num,
+                "distance": round(float(c.lap.get("lapDistance", 0.0) or 0.0), 1),
+                "time": round(float(c.lap.get("currentLapTime", 0.0) or 0.0), 3),
+                "trackLength": round(float(s.track_length or 0.0), 1),
+                "invalid": bool(c.lap.get("currentLapInvalid")),
+                "traceWindow": 8,
+            }
+            snap["diagnostics"]["spinEvents"] = c.counts.get("spins", 0)
+        by_name[name.lower()] = dict(row, snapshot=snap)
     return roster, by_name
 
 
@@ -1489,6 +1723,8 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
         ),
         "recentLaps": laps[-5:],
         "setupChangedLap": snap.get("setupChangedLap"),
+        "liveTrace": snap.get("liveTrace", []),
+        "liveLap": snap.get("liveLap", {}),
     }
     if snap["setup"]:
         try:

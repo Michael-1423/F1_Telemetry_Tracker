@@ -125,6 +125,7 @@ class Car:
         self.finish_st: float | None = None
         self.trail: list[float] = []                # session time at each 10 m of total distance
         self.cur_trace: dict[int, tuple] = {}       # 5 m bin -> (speed, thr, brk, steer, gear)
+        self.live_pedal_trace: deque[tuple[float, float, float]] = deque()
         self.cur_onsets: list[tuple[float, int]] = []   # (lap distance, speed) where brake crossed 50%
         self.lap_traces: dict[int, tuple] = {}      # humans: lap -> (trace, onsets), for re-analysis
         self.tl_count = 0                           # all four wheels off the white lines
@@ -920,6 +921,11 @@ class Session:
     # ------------------------------------------------------------- telemetry
     def _on_telemetry(self, c: Car, td: dict, st: float, wall: float) -> None:
         c.tel = td
+        c.live_pedal_trace.append(
+            (st, round(td["throttle"], 2), round(td["brake"], 2))
+        )
+        while c.live_pedal_trace and st - c.live_pedal_trace[0][0] > 8.0:
+            c.live_pedal_trace.popleft()
         ld = c.lap
         lapd = ld.get("lapDistance", -1.0)
         speed = td["speed"]

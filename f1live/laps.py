@@ -80,10 +80,15 @@ def corner_metrics(trace: dict[int, tuple], onsets: list[tuple[float, int]], zon
         brake = next(((d, sp) for d, sp in onsets if z["start"] <= d <= apex_d + BIN), None)
         thr_on = next((b * BIN for b in bins if b > apex and trace[b][1] >= 0.95), None)
         after = [trace[b][0] for b in bins if b >= apex]
+        apex_row = trace[apex]
+        steering = [abs(trace[b][3]) for b in bins]
         out[z["name"]] = {
             "min_v": trace[apex][0], "apex_d": apex_d, "gear": trace[apex][4],
             "brake_at": round(brake[0], 1) if brake else None, "entry_v": brake[1] if brake else None,
             "throttle_at": thr_on, "exit_v": max(after) if after else None,
+            "steer_peak": round(max(steering), 2), "steer_at_apex": round(abs(apex_row[3]), 2),
+            "brake_at_apex": round(apex_row[2], 2), "throttle_at_apex": round(apex_row[1], 2),
+            "trail_braking": bool(apex_row[2] >= 0.1 and abs(apex_row[3]) >= 0.2),
         }
     return out
 
@@ -117,6 +122,11 @@ def profile(laps: list[dict], zones: list[dict]) -> list[dict]:
             "gear": statistics.mode([v["gear"] for v in vals]) if vals else None,
             "throttle_at": _mean([v.get("throttle_at") for v in vals]),
             "exit_v": _mean([v.get("exit_v") for v in vals]),
+            "steer_peak": _mean([v.get("steer_peak") for v in vals]),
+            "steer_at_apex": _mean([v.get("steer_at_apex") for v in vals]),
+            "brake_at_apex": _mean([v.get("brake_at_apex") for v in vals]),
+            "throttle_at_apex": _mean([v.get("throttle_at_apex") for v in vals]),
+            "trail_braking_pct": round(100 * sum(bool(v.get("trail_braking")) for v in vals) / len(vals)),
         })
     return rows
 
