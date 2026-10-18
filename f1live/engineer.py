@@ -247,6 +247,7 @@ class EngineerFeed:
         self.setup_changed_lap: int | None = (
             None  # lap of the last setup change (counters restart there)
         )
+        self.setup_changed_fields: set[str] = set()
         self._lap_seen = False  # had a lap packet from this game yet
         self._partial_lap = False  # joined mid-lap: the lap in progress isn't logged
 
@@ -422,17 +423,23 @@ class EngineerFeed:
             "ballast": su["ballast"],
             "fuelLoad": round(su["fuelLoad"], 1),
         }
-        if old and _handling(old) != _handling(self.setup):
-            self._restart_evidence()
+        if old:
+            old_handling = _handling(old)
+            new_handling = _handling(self.setup)
+            if old_handling == new_handling:
+                return
+            changed_fields = {
+                k
+                for k, v in new_handling.items()
+                if old_handling.get(k) != v
+            }
+            self._restart_evidence(changed_fields)
 
-    def _restart_evidence(self) -> None:
-        """The driver changed the setup: what the detectors counted belongs to the old one. Without this the
-        engine keeps diagnosing (say) kerb bottoming from laps on the old setup and asks for the same change
-        again on top of the new values."""
-        self.oversteer_events = self.understeer_events = 0
-        self.front_locking_events = self.rear_locking_events = 0
-        self.kerb_bottoming_events = self.kerb_last_lap = 0
+    def _restart_evidence(self, changed_fields: set[str]) -> None:
+        """Mark a setup change so immediate follow-up analysis can keep unrelated advice while
+        suppressing parameters that were just adjusted."""
         self.setup_changed_lap = self.lap_data.get("currentLapNum")
+        self.setup_changed_fields = set(changed_fields)
 
     def _record_completed_lap(
         self, lap_num: int, lap_time: float, current_lap_packet: dict
@@ -493,6 +500,8 @@ class EngineerFeed:
         self.oversteer_events = 0
         self.understeer_events = 0
         self.kerb_last_lap, self.kerb_bottoming_events = self.kerb_bottoming_events, 0
+        if self.setup_changed_lap is not None and lap_num >= self.setup_changed_lap:
+            self.setup_changed_fields = set()
 
     def snapshot(self, driver_name: str, session: dict) -> dict:
         """The relay's TelemetrySnapshot for this driver (the engine's input)."""
@@ -508,6 +517,7 @@ class EngineerFeed:
             "completedLaps": list(self.completed_laps),
             "participants": [],
             "setupChangedLap": self.setup_changed_lap,
+            "setupChangedFields": sorted(self.setup_changed_fields),
             "diagnostics": {
                 "oversteerEvents": self.oversteer_events,
                 "understeerEvents": self.understeer_events,
@@ -750,9 +760,22 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     recommendations: list[dict] = []
     issues: list[dict] = []
 
+    changed = snapshot.get("setupChangedLap")
+    changed_fields = set(snapshot.get("setupChangedFields") or [])
+    completed_laps = list(snapshot.get("completedLaps", []))
+    post_change_laps = [
+        lap
+        for lap in completed_laps
+        if changed is not None and lap.get("lapNumber", 0) >= changed
+    ]
+    using_prechange_evidence = bool(changed_fields and changed is not None and not post_change_laps)
+    suppression_fields = changed_fields if using_prechange_evidence else set()
+
     def rec(
         category, parameter, label, current, recommended, delta, unit, reason, priority
     ):
+        if parameter in suppression_fields:
+            return
         recommendations.append(
             {
                 "category": category,
@@ -789,12 +812,14 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     # behaviour and should influence setup recommendations.
     # Only laps on the current setup count: after a change, laps on the old one would
     # keep asking for the change that was just made.
-    changed = snapshot.get("setupChangedLap")
-    laps = [
-        lap
-        for lap in snapshot.get("completedLaps", [])
-        if changed is None or lap.get("lapNumber", 0) >= changed
-    ]
+    if changed is None:
+        laps = completed_laps
+    elif post_change_laps:
+        laps = post_change_laps
+    elif using_prechange_evidence:
+        laps = completed_laps
+    else:
+        laps = []
     for lap in laps[-3:]:
         oversteer_count += lap.get("oversteerEvents", 0) or 0
         understeer_count += lap.get("understeerEvents", 0) or 0
