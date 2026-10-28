@@ -54,6 +54,11 @@ DEFAULTS: dict[str, float] = {
     "lock_brake": 0.7,  # brake pedal above this...
     # ...with front brakes this much hotter than the rears -> front locking sample
     "lock_brake_temp_gap": 120.0,
+    # P0.2 gates: only count episodes while the car is actually racing.
+    "oversteer_min_kmh": 40.0,
+    "understeer_min_kmh": 40.0,
+    "kerb_min_kmh": 50.0,
+    "lock_min_kmh": 40.0,
 }
 
 FEED_PACKETS = {P.MOTION, P.LAP, P.TELEMETRY, P.STATUS, P.SETUPS}
@@ -309,11 +314,20 @@ class EngineerFeed:
         if kerb_hits:
             self.kerb_bottoming_events += 1
         # Episode evidence: one contiguous run = one event, with duration/magnitude.
-        self._step_episode("oversteer", oversteer, slip=max(slips[:2] or [0]),
+        # These are gated on actually driving; the legacy counters above are left
+        # as they were for the frozen v1 analysis.
+        speed = float(self.telemetry.get("speed", 0.0) or 0.0)
+        in_pit = bool(self.lap_data.get("pitStatus", 0)) or int(self.lap_data.get("driverStatus", 4) or 0) == 0
+        on_track = EV.is_on_track(self.telemetry.get("surfaceType"))
+        over_gate = oversteer and speed > float(self.th["oversteer_min_kmh"]) and not in_pit and on_track
+        under_gate = (understeer and speed > float(self.th["understeer_min_kmh"])
+                      and not in_pit and on_track and abs(float(self.telemetry.get("steer", 0.0) or 0.0)) > 0.05)
+        kerb_gate = speed > float(self.th["kerb_min_kmh"]) and not in_pit and on_track
+        self._step_episode("oversteer", over_gate, slip=max(slips[:2] or [0]),
                            g=abs(m["gForceLateral"]))
-        self._step_episode("understeer", understeer, slip=max(slips[2:4] or [0]),
+        self._step_episode("understeer", under_gate, slip=max(slips[2:4] or [0]),
                            g=abs(m["gForceLateral"]))
-        self._step_episode("kerb", bool(kerb_hits), wheels=kerb_hits)
+        self._step_episode("kerb", bool(kerb_hits) and kerb_gate, wheels=kerb_hits)
 
     def on_telemetry(self, td: dict) -> None:
         t = {
@@ -329,6 +343,7 @@ class EngineerFeed:
             "tyresInnerTemperature": _quad(td["tyresInnerTemperature"]),
             "engineTemperature": td["engineTemperature"],
             "tyresPressure": _quad(td["tyresPressure"], 1),
+            "surfaceType": list(td["surfaceType"]),
         }
         self.telemetry.update(t)
         if t["speed"] > self.current_lap_max_speed:
@@ -346,6 +361,9 @@ class EngineerFeed:
             if b_front_avg > b_rear_avg + self.th["lock_brake_temp_gap"]:
                 self.front_locking_events += 1
                 front_lock = True
+        in_pit = bool(self.lap_data.get("pitStatus", 0)) or int(self.lap_data.get("driverStatus", 4) or 0) == 0
+        front_lock = (front_lock and float(t["speed"]) > float(self.th["lock_min_kmh"])
+                      and not in_pit and EV.is_on_track(t.get("surfaceType")))
         self._step_episode("front_lock", front_lock, wheels={2, 3})
 
     def on_lap_data(self, ld: dict) -> None:
@@ -359,6 +377,8 @@ class EngineerFeed:
             "carPosition": ld["carPosition"],
             "currentLapNum": ld["currentLapNum"],
             "pitStatus": ld["pitStatus"],
+            "driverStatus": ld["driverStatus"],
+            "resultStatus": ld["resultStatus"],
             "isCurrentLapInvalid": bool(ld["currentLapInvalid"]),
             "penalties": ld["penalties"],
         }
@@ -468,6 +488,7 @@ class EngineerFeed:
             "speed": float(tel.get("speed", 0.0) or 0.0),
             "g": abs(float((self.motion or {}).get("gForceLateral", 0.0) or 0.0)),
             "in_pit": bool(ld.get("pitStatus", 0)),
+            "in_garage": int(ld.get("driverStatus", 4) or 0) == 0,
             "on_track": EV.is_on_track(tel.get("surfaceType")),
         }
 

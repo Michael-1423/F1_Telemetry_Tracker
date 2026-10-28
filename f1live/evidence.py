@@ -163,14 +163,17 @@ class EpisodeTracker:
 
 def summarize_episodes(episodes: Iterable[Episode | dict]) -> dict[str, dict]:
     """Group episodes by kind into a JSON-friendly summary."""
-    out: dict[str, dict] = {}
+    def empty() -> dict:
+        return {
+            "count": 0, "seconds": 0.0, "max_slip": 0.0, "max_g": 0.0,
+            "max_speed_kmh": 0.0, "wheels": set(), "corners": set(), "episodes": [],
+        }
+
+    out: dict[str, dict] = {kind: empty() for kind in EPISODE_KINDS}
     for item in episodes:
         ep = item.as_dict() if isinstance(item, Episode) else dict(item)
         kind = str(ep.get("kind", "?"))
-        row = out.setdefault(kind, {
-            "count": 0, "seconds": 0.0, "max_slip": 0.0, "max_g": 0.0,
-            "max_speed_kmh": 0.0, "wheels": set(), "corners": set(), "episodes": [],
-        })
+        row = out.setdefault(kind, empty())
         row["count"] += 1
         row["seconds"] = round(row["seconds"] + float(ep.get("duration_s") or 0.0), 3)
         row["max_slip"] = max(row["max_slip"], float(ep.get("max_slip") or 0.0))
