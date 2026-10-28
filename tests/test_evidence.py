@@ -377,6 +377,35 @@ def test_analyze_v2_rear_lock_trigger():
                for i in result["diagnosedIssues"])
 
 
+def test_analyze_v2_attributes_damage_and_worn_tyres():
+    snap = _v2_snapshot()
+    snap["damage"]["frontLeftWingDamage"] = 40
+    snap["completedLaps"][0]["episodes"]["understeer"] = EV.summarize_episodes([
+        EV.Episode("understeer", float(i), float(i) + 0.1, 1) for i in range(3)
+    ])["understeer"]
+    result = E.analyze_v2(snap)
+    assert any(c["cause"] == "damage" for c in result["causes"])
+    assert any("front-wing damage" in i["title"] for i in result["diagnosedIssues"])
+
+    snap = _v2_snapshot()
+    snap["damage"]["tyresWear"].update(rl=85, rr=85)
+    snap["status"]["tyresAgeLaps"] = 14
+    result = E.analyze_v2(snap)
+    assert any(c["cause"] == "tyre" for c in result["causes"])
+    assert any("worn rear tyres" in i["title"] for i in result["diagnosedIssues"])
+
+
+def test_contact_spins_are_not_used_as_setup_evidence():
+    snap = _v2_snapshot()
+    # five spins, all contact-induced: v2 must use soloSpinEvents (0), not spinEvents
+    snap["diagnostics"]["spinEvents"] = 5
+    snap["diagnostics"]["soloSpinEvents"] = 0
+    for lap in snap["completedLaps"]:
+        lap["episodes"]["oversteer"] = EV.summarize_episodes([])["oversteer"]
+    result = E.analyze_v2(snap)
+    assert result["balanceScore"] >= 0  # no oversteer bias from the contact spins
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

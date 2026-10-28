@@ -1064,16 +1064,69 @@ def analyze_v2(snapshot: dict, active_feedback: list[str] | None = None) -> dict
         "top_speed_note": top_speed_note,
         "laps_remaining": remaining,
     }
+    evidence["causes"] = _attribution(snapshot, evidence)
     snap["_evidence"] = evidence
     result = _analyze_impl(snap, fb, enhanced=True)
     result["engine"] = "v2"
     result["evidence"] = evidence
+    result["causes"] = evidence.get("causes", [])
     result["provisional"] = len(push_laps) < int(config.get("min_clean_laps", 2))
     result["confidence"] = round(min(
         wear.get("confidence") or 0.0,
         0.4 + 0.15 * len(push_laps),
-    ), 2)
+    ) * (0.7 if result["causes"] else 1.0), 2)
     return result
+
+
+def _attribution(snapshot: dict, evidence: dict) -> list[dict]:
+    """Explain balance problems that are not setup problems.
+
+    A damaged front wing, worn rear tyres or a contact-induced spin can look
+    exactly like understeer/oversteer. Name the likely cause before (or
+    alongside) prescribing clicks.
+    """
+    damage = snapshot.get("damage") or {}
+    status = snapshot.get("status") or {}
+    episodes = (evidence.get("episodes") or {})
+    under = (episodes.get("understeer") or {}).get("count", 0)
+    over = (episodes.get("oversteer") or {}).get("count", 0)
+    high_speed = (episodes.get("oversteer") or {}).get("episodes", [])
+    high_speed = sum(1 for ep in high_speed if float(ep.get("max_speed_kmh") or 0) >= 180)
+    front_wing = max(float(damage.get("frontLeftWingDamage") or 0),
+                     float(damage.get("frontRightWingDamage") or 0))
+    rear_wing = float(damage.get("rearWingDamage") or 0)
+    wear = damage.get("tyresWear") or {}
+    front_wear = max(float(wear.get("fl") or 0), float(wear.get("fr") or 0))
+    rear_wear = max(float(wear.get("rl") or 0), float(wear.get("rr") or 0))
+    age = int(status.get("tyresAgeLaps") or 0)
+    causes = []
+    if front_wing >= 10 and under:
+        causes.append({
+            "issue": "understeer", "cause": "damage", "severity": "warning",
+            "title": "Understeer likely from front-wing damage",
+            "description": f"Front-wing damage is {front_wing:.0f}%. Repair it before tuning the setup; "
+                           "adding front wing to compensate will not restore the lost balance.",
+        })
+    if rear_wing >= 10 and (over or high_speed):
+        causes.append({
+            "issue": "oversteer", "cause": "damage", "severity": "warning",
+            "title": "Oversteer likely from rear-wing damage",
+            "description": f"Rear-wing damage is {rear_wing:.0f}%. Repair it before changing rear-wing or toe settings.",
+        })
+    if (rear_wear >= 60 or age >= 12) and over:
+        causes.append({
+            "issue": "oversteer", "cause": "tyre", "severity": "warning",
+            "title": "Oversteer likely from worn rear tyres",
+            "description": f"Rear wear is {rear_wear:.0f}% at {age} laps. Manage or replace the tyres before "
+                           "opening the differential to mask the wear.",
+        })
+    if front_wear >= 60 and under:
+        causes.append({
+            "issue": "understeer", "cause": "tyre", "severity": "warning",
+            "title": "Understeer likely from worn front tyres",
+            "description": f"Front wear is {front_wear:.0f}%. Tyre management or a stop is the first fix, not more front wing.",
+        })
+    return causes
 
 
 def _laps_remaining(snapshot: dict) -> int:
@@ -1771,6 +1824,18 @@ def _analyze_impl(snapshot: dict, active_feedback: list[str] | None = None,
     else:
         result_style = None
 
+    if enhanced and evidence.get("causes"):
+        existing_titles = {i["title"] for i in issues}
+        for cause in evidence["causes"]:
+            if cause["title"] not in existing_titles:
+                issues.insert(0, {
+                    "title": cause["title"],
+                    "description": cause["description"],
+                    "severity": cause.get("severity", "warning"),
+                    "cause": cause.get("cause"),
+                })
+                existing_titles.add(cause["title"])
+
     label = "Balanced / Neutral"
     if balance <= -5:
         label = "Heavy Oversteer"
@@ -2065,6 +2130,10 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
                 "traceWindow": 8,
             }
             snap["diagnostics"]["spinEvents"] = c.counts.get("spins", 0)
+            snap["diagnostics"]["contactSpins"] = c.counts.get("contact_spins", 0)
+            snap["diagnostics"]["soloSpinEvents"] = max(
+                0, c.counts.get("spins", 0) - c.counts.get("contact_spins", 0)
+            )
         by_name[name.lower()] = dict(row, snapshot=snap)
     return roster, by_name
 
