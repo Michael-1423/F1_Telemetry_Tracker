@@ -735,6 +735,7 @@ class EngineerFeed:
                     "rolling": self._rolling_temps(),
                     "lapAverage": EV.temperature_summary(self.completed_laps, window=3),
                 },
+                "wear": EV.wear_estimate(self.completed_laps),
             },
             "timestamp": self.last_st,
         }

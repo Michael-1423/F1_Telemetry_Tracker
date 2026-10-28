@@ -270,6 +270,35 @@ def test_pit_temperature_does_not_pollute_lap_average():
     assert summary["front_avg"] == 98.0
 
 
+def test_wear_estimate_ignores_outliers_and_uses_push_laps():
+    def lap_row(n, fl, fr, rl, rr, push=True, generation=0):
+        return {"lap": n, "push": push, "valid": True, "setup_generation": generation,
+                "tyreWearDelta": {"fl": fl, "fr": fr, "rl": rl, "rr": rr}}
+
+    laps = [
+        lap_row(1, 2.0, 2.0, 0.8, 0.8),
+        lap_row(2, 2.2, 2.2, 0.9, 0.9),
+        lap_row(3, 9.5, 9.5, 0.9, 0.9),   # puncture/damage outlier
+        lap_row(4, 2.1, 2.1, 0.8, 0.8),
+        lap_row(5, 8.0, 8.0, 8.0, 8.0, push=False),  # out lap
+    ]
+    w = EV.wear_estimate(laps)
+    assert w["outliers"] == 1
+    assert 2.0 <= w["front_rate"] <= 2.3
+    assert 0.8 <= w["rear_rate"] <= 1.0
+    assert w["laps"] == 3
+
+    # 3+ laps use a regression, so a rising trend is captured
+    trend = [lap_row(n, 2.0 + 0.2 * n, 2.0 + 0.2 * n, 1.0, 1.0) for n in range(1, 5)]
+    w = EV.wear_estimate(trend)
+    assert 2.4 <= w["front_rate"] <= 2.6
+    assert w["provisional"] is False
+
+    # a setup generation filters out the old setup's laps
+    w = EV.wear_estimate(laps, generation=1)
+    assert w["laps"] == 0
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

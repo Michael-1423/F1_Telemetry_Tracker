@@ -278,12 +278,21 @@ def _slope(xs: list[float], ys: list[float]) -> float | None:
     return sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / den
 
 
+def _consistency(values: list[float]) -> float:
+    """1.0 for identical samples, lower when they scatter (0.5 for CV=1)."""
+    mean = statistics.fmean(values) if values else 0.0
+    if mean <= 1e-9 or len(values) < 2:
+        return 1.0
+    cv = statistics.pstdev(values) / mean
+    return 1.0 / (1.0 + cv)
+
+
 def wear_estimate(laps: list[dict], generation: int | None = None, min_laps: int = 2,
                   outlier_factor: float = 3.0) -> dict[str, Any]:
     """Front/rear wear rate from clean push laps on the current setup.
 
-    Uses the mean of the two wheels on each axle, drops puncture/damage
-    outliers, and switches to a linear regression once there are 3+ laps.
+    Uses the mean of the two wheels on each axle and drops puncture/damage
+    outliers. ``confidence`` falls when the per-lap samples scatter.
     """
     rows = []
     for lap in laps:
@@ -319,11 +328,9 @@ def wear_estimate(laps: list[dict], generation: int | None = None, min_laps: int
     xs = [float(r[0]) for r in rows]
     front_vals = [r[1] for r in rows]
     rear_vals = [r[2] for r in rows]
-    f_rate = _slope(xs, front_vals) if len(rows) >= 3 else statistics.fmean(front_vals)
-    r_rate = _slope(xs, rear_vals) if len(rows) >= 3 else statistics.fmean(rear_vals)
-    f_rate = max(0.0, float(f_rate if f_rate is not None else statistics.fmean(front_vals)))
-    r_rate = max(0.0, float(r_rate if r_rate is not None else statistics.fmean(rear_vals)))
-    confidence = min(1.0, 0.35 + 0.15 * len(rows))
+    f_rate = max(0.0, float(statistics.fmean(front_vals)))
+    r_rate = max(0.0, float(statistics.fmean(rear_vals)))
+    confidence = min(1.0, 0.35 + 0.15 * len(rows)) * _consistency(front_vals + rear_vals)
     return {
         "front_rate": round(f_rate, 2),
         "rear_rate": round(r_rate, 2),
