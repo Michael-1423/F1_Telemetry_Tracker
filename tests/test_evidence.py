@@ -46,6 +46,14 @@ def lap(status=4, pit=0, distance=100.0, num=1):
     return p
 
 
+def status(compound=16, age=5, wear=(0, 0, 0, 0)):
+    p = blank(P.STATUS)
+    p["carStatusData"][0].update(visualTyreCompound=compound, tyresAgeLaps=age,
+                                 tyresWear=list(wear), fuelInTank=20.0,
+                                 fuelRemainingLaps=10.0)
+    return p
+
+
 def test_one_slide_is_one_episode_at_any_rate():
     for hz in (10, 20, 60):
         tr = EV.EpisodeTracker("oversteer", gap_s=0.2, cooldown_s=0.1)
@@ -167,6 +175,41 @@ def test_gates_apply_to_kerbs_and_front_locks():
     assert lock_count() == 1
     assert lock_count(pit=1) == 0
     assert lock_count(speed=10) == 0
+
+
+def test_episode_window_uses_recent_push_laps_and_generation():
+    def lap_row(n, push, count, generation=0):
+        eps = [EV.Episode("oversteer", float(i), float(i) + 0.1, n) for i in range(count)]
+        return {"lap": n, "push": push, "setup_generation": generation,
+                "episodes": EV.summarize_episodes(eps)}
+
+    laps = [
+        lap_row(1, True, 2, 0),
+        lap_row(2, False, 5, 0),   # out lap: must not count
+        lap_row(3, True, 1, 0),
+        lap_row(4, True, 3, 1),    # new setup generation
+    ]
+    w = EV.episode_window(laps, window=2)
+    assert w["laps_used"] == 2
+    assert w["oversteer"]["count"] == 4  # laps 3 + 4
+    assert w["laps"] == [3, 4]
+
+    w = EV.episode_window(laps, window=3, generation=1)
+    assert w["oversteer"]["count"] == 3
+    assert w["laps"] == [4]
+
+
+def test_tyre_change_resets_episode_evidence():
+    f = E.EngineerFeed()
+    f.feed(status(compound=16, age=5), 0)
+    f.feed(lap(4, 0), 0)
+    f.feed(telemetry(100), 0)
+    f.feed(motion((0.30, 0.10, 0.10, 0.05)), 0)
+    assert f.snapshot("x", {})["diagnostics"]["episodes"]["oversteer"]["count"] == 1
+    f.feed(status(compound=17, age=0), 0)
+    snap = f.snapshot("x", {})
+    assert snap["diagnostics"]["episodes"]["oversteer"]["count"] == 0
+    assert snap["tyreGeneration"] == 1
 
 
 if __name__ == "__main__":

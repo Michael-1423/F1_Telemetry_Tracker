@@ -255,6 +255,9 @@ class EngineerFeed:
         self.episode_trackers = {k: EV.EpisodeTracker(k) for k in EV.EPISODE_KINDS}
         self.episode_current: dict[str, list[dict]] = {k: [] for k in EV.EPISODE_KINDS}
         self.episode_last_lap: dict[str, dict] = {}
+        self.tyre_generation = 0
+        self._tyre_compound_last: str | None = None
+        self._tyre_age_last: int | None = None
         self.setup_changed_lap: int | None = (
             None  # lap of the last setup change (counters restart there)
         )
@@ -413,13 +416,26 @@ class EngineerFeed:
         self._reset_episodes()
 
     def on_status(self, cs: dict) -> None:
+        compound = TYRE_COMPOUNDS.get(cs["visualTyreCompound"], "Dry")
+        age = int(cs["tyresAgeLaps"] or 0)
+        if self._tyre_compound_last is not None and (
+            compound != self._tyre_compound_last or (self._tyre_age_last is not None and age < self._tyre_age_last)
+        ):
+            # New tyres: lockup/wear/temperature evidence on the old set is not
+            # evidence about this one. Start a new tyre generation.
+            self.tyre_generation += 1
+            self._reset_episodes()
+            self._temp_sum = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+            self._temp_n = 0
+        self._tyre_compound_last = compound
+        self._tyre_age_last = age
         self.status.update(
             {
                 "fuelMix": cs["fuelMix"],
                 "fuelInTank": round(cs["fuelInTank"], 2),
                 "fuelRemainingLaps": round(cs["fuelRemainingLaps"], 2),
                 "drsAllowed": bool(cs["drsAllowed"]),
-                "tyreCompound": TYRE_COMPOUNDS.get(cs["visualTyreCompound"], "Dry"),
+                "tyreCompound": compound,
                 "tyresAgeLaps": cs["tyresAgeLaps"],
                 "ersStoreEnergy": round(cs["ersStoreEnergy"], 0),
                 "ersDeployMode": cs["ersDeployMode"],
@@ -579,6 +595,7 @@ class EngineerFeed:
                 "understeerEvents": self.understeer_events,
                 "kerbEvents": self.kerb_bottoming_events,
                 "episodes": lap_episodes,
+                "tyreGeneration": self.tyre_generation,
             }
         )
         self.current_lap_max_speed = 0
@@ -600,6 +617,7 @@ class EngineerFeed:
             "completedLaps": list(self.completed_laps),
             "participants": [],
             "setupChangedLap": self.setup_changed_lap,
+            "tyreGeneration": self.tyre_generation,
             "diagnostics": {
                 "oversteerEvents": self.oversteer_events,
                 "understeerEvents": self.understeer_events,
