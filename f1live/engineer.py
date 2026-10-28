@@ -60,6 +60,8 @@ DEFAULTS: dict[str, float] = {
     "understeer_min_kmh": 40.0,
     "kerb_min_kmh": 50.0,
     "lock_min_kmh": 40.0,
+    "rear_lock_brake": 0.4,
+    "rear_lock_ratio": 0.80,
 }
 
 FEED_PACKETS = {P.MOTION, P.LAP, P.TELEMETRY, P.STATUS, P.SETUPS}
@@ -342,6 +344,7 @@ class EngineerFeed:
         self._step_episode("understeer", under_gate, slip=max(slips[2:4] or [0]),
                            g=abs(m["gForceLateral"]))
         self._step_episode("kerb", bool(kerb_hits) and kerb_gate, wheels=kerb_hits)
+        self._step_rear_lock(legacy=True)
 
     def on_telemetry(self, td: dict) -> None:
         t = {
@@ -390,6 +393,7 @@ class EngineerFeed:
         front_lock = (front_lock and float(t["speed"]) > float(self.th["lock_min_kmh"])
                       and not in_pit and EV.is_on_track(t.get("surfaceType")))
         self._step_episode("front_lock", front_lock, wheels={2, 3})
+        self._step_rear_lock()
 
     def on_lap_data(self, ld: dict) -> None:
         lap = {
@@ -563,6 +567,36 @@ class EngineerFeed:
         return (float(tel.get("speed", 0.0) or 0.0) > min_kmh and not in_pit
                 and EV.is_on_track(tel.get("surfaceType")))
 
+    def _rear_lock_condition(self) -> bool:
+        """Rear wheel speed well below the fronts while braking hard.
+
+        F1 2020 only sends per-wheel speed for the player's own car, which is
+        exactly the feed the engineer uses. Units are m/s.
+        """
+        tel = self.telemetry or {}
+        ld = self.lap_data or {}
+        brake = float(tel.get("brake", 0.0) or 0.0)
+        speed = float(tel.get("speed", 0.0) or 0.0)
+        if brake < float(self.th["rear_lock_brake"]) or speed < float(self.th["lock_min_kmh"]):
+            return False
+        if bool(ld.get("pitStatus", 0)) or int(ld.get("driverStatus", 4) or 0) == 0:
+            return False
+        ws = (self.motion or {}).get("wheelSpeed") or []
+        if len(ws) < 4:
+            return False
+        rear = max(float(ws[0]), float(ws[1]))
+        front = max(float(ws[2]), float(ws[3]))
+        ground = speed / 3.6
+        if front <= 5.0 or ground <= 5.0:
+            return False
+        return rear < front * float(self.th["rear_lock_ratio"]) and rear < ground * 0.92
+
+    def _step_rear_lock(self, legacy: bool = False) -> None:
+        condition = self._rear_lock_condition()
+        if legacy and condition:
+            self.rear_locking_events += 1
+        self._step_episode("rear_lock", condition, wheels={0, 1})
+
     def _rolling_temps(self) -> dict | None:
         if not self._temp_window:
             return None
@@ -690,6 +724,8 @@ class EngineerFeed:
                 "label": quality["label"],
                 "oversteerEvents": self.oversteer_events,
                 "understeerEvents": self.understeer_events,
+                "frontLockingEvents": self.front_locking_events,
+                "rearLockingEvents": self.rear_locking_events,
                 "kerbEvents": self.kerb_bottoming_events,
                 "episodes": lap_episodes,
                 "tyreGeneration": self.tyre_generation,

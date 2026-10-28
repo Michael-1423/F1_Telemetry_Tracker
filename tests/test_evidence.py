@@ -25,9 +25,11 @@ def blank(pid: int, st: float = 0.0, player: int = 0) -> dict:
     return p
 
 
-def motion(slip, susp_v=(0.0, 0.0, 0.0, 0.0), glat=0.0, st=0.0):
+def motion(slip, susp_v=(0.0, 0.0, 0.0, 0.0), glat=0.0, st=0.0,
+           wheel_speed=(0.0, 0.0, 0.0, 0.0)):
     p = blank(P.MOTION, st)
     p["wheelSlip"], p["suspensionVelocity"] = list(slip), list(susp_v)
+    p["wheelSpeed"] = list(wheel_speed)
     p["carMotionData"][0]["gForceLateral"] = glat
     return p
 
@@ -341,6 +343,38 @@ def test_analyze_v2_top_speed_hint():
     result = E.analyze_v2(snap)
     assert result["evidence"]["top_speed_trigger"] is True
     assert any(i["title"] == "Excessive Aerodynamic Drag" for i in result["diagnosedIssues"])
+
+
+def test_rear_lock_detector():
+    def count(rear_speed=27.8, front_speed=27.8, brake=0.8, speed=100.0,
+              status=4, pit=0):
+        f = E.EngineerFeed()
+        f.feed(lap(status, pit), 0)
+        f.feed(telemetry(speed, brake=brake), 0)
+        f.feed(motion((0, 0, 0, 0), wheel_speed=(rear_speed, rear_speed,
+                                                  front_speed, front_speed)), 0)
+        return f.snapshot("x", {})
+
+    snap = count(rear_speed=15.0)
+    assert snap["diagnostics"]["episodes"]["rear_lock"]["count"] == 1
+    assert snap["diagnostics"]["rearLockingEvents"] == 1
+
+    assert count(rear_speed=27.0)["diagnostics"]["episodes"]["rear_lock"]["count"] == 0
+    assert count(rear_speed=15.0, speed=20.0)["diagnostics"]["episodes"]["rear_lock"]["count"] == 0
+    assert count(rear_speed=15.0, brake=0.1)["diagnostics"]["episodes"]["rear_lock"]["count"] == 0
+    assert count(rear_speed=15.0, pit=1)["diagnostics"]["episodes"]["rear_lock"]["count"] == 0
+
+
+def test_analyze_v2_rear_lock_trigger():
+    snap = _v2_snapshot()
+    laps = snap["completedLaps"]
+    for n in (1, 2):
+        laps[n - 1]["episodes"]["rear_lock"] = EV.summarize_episodes([
+            EV.Episode("rear_lock", float(n), float(n) + 0.1, n, wheels={0, 1})
+        ])["rear_lock"]
+    result = E.analyze_v2(snap)
+    assert any(i["title"] == "Rear Axle Snapping Under Braking"
+               for i in result["diagnosedIssues"])
 
 
 if __name__ == "__main__":
