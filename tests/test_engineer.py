@@ -295,6 +295,55 @@ def test_setup_change_restarts_the_evidence():
     assert f.snapshot("x", sess)["setupChangedLap"] == 1
 
 
+def test_partial_setup_change_keeps_other_recommendations():
+    f = E.EngineerFeed()
+    su = blank(P.SETUPS)
+    su["carSetups"][0].update(
+        frontWing=7,
+        rearWing=7,
+        onThrottle=60,
+        offThrottle=55,
+        frontCamber=-3.0,
+        rearCamber=-1.5,
+        frontToe=0.05,
+        rearToe=0.3,
+        frontSuspension=3,
+        rearSuspension=3,
+        frontAntiRollBar=5,
+        rearAntiRollBar=5,
+        frontSuspensionHeight=4,
+        rearSuspensionHeight=5,
+        brakePressure=95,
+        brakeBias=55,
+        frontLeftTyrePressure=23.0,
+        frontRightTyrePressure=23.0,
+        rearLeftTyrePressure=21.0,
+        rearRightTyrePressure=21.0,
+        ballast=5,
+        fuelLoad=20.0,
+    )
+    f.feed(su, 0)
+    lap = blank(P.LAP)
+    lap["lapData"][0].update(currentLapNum=1)
+    f.feed(lap, 0)
+    for _ in range(5):
+        f.feed(motion((0.30, 0.10, 0.10, 0.05)), 0)
+
+    sess = {"sessionType": "Practice 1", "sessionTypeId": 1}
+    before = {
+        r["parameter"]: r for r in E.analyze(f.snapshot("x", sess))["recommendations"]
+    }
+    assert "onThrottleDiff" in before and "rearAntiRollBar" in before
+
+    su["carSetups"][0]["onThrottle"] = 55
+    f.feed(su, 0)
+    after = {
+        r["parameter"]: r for r in E.analyze(f.snapshot("x", sess))["recommendations"]
+    }
+    assert "onThrottleDiff" not in after
+    assert "rearAntiRollBar" in after
+
+
 def test_session_feeds_each_drivers_own_car():
     s = Session(1, 0.0, {})
     su = blank(P.SETUPS, player=3)

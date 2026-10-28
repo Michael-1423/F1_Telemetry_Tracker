@@ -445,6 +445,18 @@ def test_untimed_out_lap_does_not_leak_into_next_lap():
     assert lap_row["episodes"]["oversteer"]["count"] == 0
 
 
+def test_v2_keeps_pending_advice_but_suppresses_changed_parameter():
+    snap = _v2_snapshot()
+    snap["setupGeneration"] = 1
+    snap["setupChangedLap"] = 5
+    snap["setupChangedFields"] = ["onThrottleDiff"]
+    result = E.analyze_v2(snap)
+    params = {r["parameter"] for r in result["recommendations"]}
+    assert result["evidence"]["using_prechange_evidence"] is True
+    assert "onThrottleDiff" not in params
+    assert "rearAntiRollBar" in params
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

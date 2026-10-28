@@ -276,6 +276,7 @@ class EngineerFeed:
         self.setup_changed_lap: int | None = (
             None  # lap of the last setup change (counters restart there)
         )
+        self.setup_changed_fields: set[str] = set()
         self._lap_seen = False  # had a lap packet from this game yet
         self._partial_lap = False  # joined mid-lap: the lap in progress isn't logged
 
@@ -556,16 +557,13 @@ class EngineerFeed:
                 "setup": dict(self.setup),
             })
             self.setup_history = self.setup_history[-20:]
-            self._restart_evidence()
+            self._restart_evidence(set(changed))
 
-    def _restart_evidence(self) -> None:
-        """The driver changed the setup: what the detectors counted belongs to the old one. Without this the
-        engine keeps diagnosing (say) kerb bottoming from laps on the old setup and asks for the same change
-        again on top of the new values."""
-        self.oversteer_events = self.understeer_events = 0
-        self.front_locking_events = self.rear_locking_events = 0
-        self.kerb_bottoming_events = self.kerb_last_lap = 0
+    def _restart_evidence(self, changed_fields: set[str]) -> None:
+        """Mark a setup change so immediate follow-up analysis can keep unrelated advice while
+        suppressing parameters that were just adjusted."""
         self.setup_changed_lap = self.lap_data.get("currentLapNum")
+        self.setup_changed_fields = set(changed_fields or ())
         self._reset_episodes()
 
     # ---------------------------------------------------------------- episodes
@@ -663,7 +661,6 @@ class EngineerFeed:
         self.episode_last_lap = {}
         for tracker in self.episode_trackers.values():
             tracker.reset()
-
     def _record_completed_lap(
         self, lap_num: int, lap_time: float, current_lap_packet: dict
     ) -> None:
@@ -761,6 +758,8 @@ class EngineerFeed:
         self.oversteer_events = 0
         self.understeer_events = 0
         self.kerb_last_lap, self.kerb_bottoming_events = self.kerb_bottoming_events, 0
+        if self.setup_changed_lap is not None and lap_num >= self.setup_changed_lap:
+            self.setup_changed_fields = set()
 
     def snapshot(self, driver_name: str, session: dict) -> dict:
         """The relay's TelemetrySnapshot for this driver (the engine's input)."""
@@ -776,6 +775,7 @@ class EngineerFeed:
             "completedLaps": list(self.completed_laps),
             "participants": [],
             "setupChangedLap": self.setup_changed_lap,
+            "setupChangedFields": sorted(self.setup_changed_fields),
             "tyreGeneration": self.tyre_generation,
             "setupGeneration": self.setup_generation,
             "setupHistory": self.setup_history[-10:],
@@ -1040,13 +1040,26 @@ def analyze_v2(snapshot: dict, active_feedback: list[str] | None = None) -> dict
     fb = list(active_feedback or [])
     laps_all = list(snapshot.get("completedLaps") or [])
     generation = snapshot.get("setupGeneration")
-    window = EV.episode_window(laps_all, window=3, generation=generation)
+    changed = snapshot.get("setupChangedLap")
+    changed_fields = set(snapshot.get("setupChangedFields") or [])
+    post_change_push = [
+        l for l in laps_all
+        if EV.lap_is_push(l) and changed is not None and l.get("lapNumber", 0) >= changed
+        and (generation is None or l.get("setup_generation") is None
+             or int(l["setup_generation"]) == int(generation))
+    ]
+    # A setup change is pending until a push lap on the new setup is logged.
+    # Until then, keep the last advice visible (the changed parameters are
+    # suppressed by the analyzer) instead of blanking the page.
+    using_prechange = bool(changed_fields and changed is not None and not post_change_push)
+    filter_generation = None if using_prechange else generation
+    window = EV.episode_window(laps_all, window=3, generation=filter_generation)
     push_laps = [l for l in laps_all
                  if EV.lap_is_push(l)
-                 and (generation is None or l.get("setup_generation") is None
-                      or int(l["setup_generation"]) == int(generation))]
-    wear = EV.wear_estimate(laps_all, generation=generation)
-    temps = EV.temperature_summary(laps_all, window=3, generation=generation)
+                 and (filter_generation is None or l.get("setup_generation") is None
+                      or int(l["setup_generation"]) == int(filter_generation))]
+    wear = EV.wear_estimate(laps_all, generation=filter_generation)
+    temps = EV.temperature_summary(laps_all, window=3, generation=filter_generation)
     diag = dict(snapshot.get("diagnostics") or {})
     diag.update({
         "oversteerEvents": window["oversteer"]["count"],
@@ -1082,6 +1095,7 @@ def analyze_v2(snapshot: dict, active_feedback: list[str] | None = None) -> dict
     top_speed_trigger, top_speed_note = _top_speed_deficit(push_laps, config)
     evidence = {
         "laps": {"push": len(push_laps), "all": len(laps_all)},
+        "using_prechange_evidence": using_prechange,
         "episodes": window,
         "wear": wear,
         "temperatures": temps,
@@ -1194,9 +1208,22 @@ def _analyze_impl(snapshot: dict, active_feedback: list[str] | None = None,
     recommendations: list[dict] = []
     issues: list[dict] = []
 
+    changed = snapshot.get("setupChangedLap")
+    changed_fields = set(snapshot.get("setupChangedFields") or [])
+    completed_laps = list(snapshot.get("completedLaps", []))
+    post_change_laps = [
+        lap
+        for lap in completed_laps
+        if changed is not None and lap.get("lapNumber", 0) >= changed
+    ]
+    using_prechange_evidence = bool(changed_fields and changed is not None and not post_change_laps)
+    suppression_fields = changed_fields if using_prechange_evidence else set()
+
     def rec(
         category, parameter, label, current, recommended, delta, unit, reason, priority
     ):
+        if parameter in suppression_fields:
+            return
         recommendations.append(
             {
                 "category": category,
@@ -1233,12 +1260,14 @@ def _analyze_impl(snapshot: dict, active_feedback: list[str] | None = None,
     # behaviour and should influence setup recommendations.
     # Only laps on the current setup count: after a change, laps on the old one would
     # keep asking for the change that was just made.
-    changed = snapshot.get("setupChangedLap")
-    laps = [
-        lap
-        for lap in snapshot.get("completedLaps", [])
-        if changed is None or lap.get("lapNumber", 0) >= changed
-    ]
+    if changed is None:
+        laps = completed_laps
+    elif post_change_laps:
+        laps = post_change_laps
+    elif using_prechange_evidence:
+        laps = completed_laps
+    else:
+        laps = []
     if not enhanced:
         for lap in laps[-3:]:
             oversteer_count += lap.get("oversteerEvents", 0) or 0
