@@ -36,6 +36,7 @@ import math
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from . import evidence as EV
 from . import lookups as L
 from . import packets as P
 
@@ -244,6 +245,11 @@ class EngineerFeed:
         self.rear_locking_events = 0
         self.kerb_bottoming_events = 0  # this lap
         self.kerb_last_lap = 0  # the last completed lap
+        # Episode evidence (see f1live/evidence.py). The old counters above are
+        # kept for the frozen v1 analysis and for backwards compatibility.
+        self.episode_trackers = {k: EV.EpisodeTracker(k) for k in EV.EPISODE_KINDS}
+        self.episode_current: dict[str, list[dict]] = {k: [] for k in EV.EPISODE_KINDS}
+        self.episode_last_lap: dict[str, dict] = {}
         self.setup_changed_lap: int | None = (
             None  # lap of the last setup change (counters restart there)
         )
@@ -271,6 +277,7 @@ class EngineerFeed:
             "gForceLongitudinal": round(cm["gForceLongitudinal"], 2),
             # [RL, RR, FL, FR]
             "wheelSlip": [round(x, 4) for x in extra["wheelSlip"]],
+            "wheelSpeed": [round(x, 4) for x in extra.get("wheelSpeed", [0, 0, 0, 0])],
             "suspensionPosition": [round(x, 4) for x in extra["suspensionPosition"]],
             "suspensionVelocity": [round(x, 4) for x in extra["suspensionVelocity"]],
         }
@@ -278,26 +285,35 @@ class EngineerFeed:
         th = self.th
         # Oversteer: significant rear wheel slip; understeer: front slip with high lateral g
         slips = m["wheelSlip"]
+        oversteer = understeer = False
         if len(slips) >= 4:
             rear_slip = max(slips[0], slips[1])
             front_slip = max(slips[2], slips[3])
             lat_g = abs(m["gForceLateral"])
-            if (
+            oversteer = (
                 rear_slip > th["oversteer_slip"]
                 and rear_slip > front_slip * th["slip_ratio"]
-            ):
-                self.oversteer_events += 1
-            elif (
+            )
+            understeer = (
                 front_slip > th["understeer_slip"]
                 and front_slip > rear_slip * th["slip_ratio"]
                 and lat_g > th["understeer_lat_g"]
-            ):
+            )
+            if oversteer:
+                self.oversteer_events += 1
+            elif understeer:
                 self.understeer_events += 1
         # Kerb strikes: a wheel punched up or dropped sharply
-        if any(
-            abs(v) > th["kerb_suspension_velocity"] for v in m["suspensionVelocity"]
-        ):
+        kerb_hits = [i for i, v in enumerate(m["suspensionVelocity"])
+                     if abs(v) > th["kerb_suspension_velocity"]]
+        if kerb_hits:
             self.kerb_bottoming_events += 1
+        # Episode evidence: one contiguous run = one event, with duration/magnitude.
+        self._step_episode("oversteer", oversteer, slip=max(slips[:2] or [0]),
+                           g=abs(m["gForceLateral"]))
+        self._step_episode("understeer", understeer, slip=max(slips[2:4] or [0]),
+                           g=abs(m["gForceLateral"]))
+        self._step_episode("kerb", bool(kerb_hits), wheels=kerb_hits)
 
     def on_telemetry(self, td: dict) -> None:
         t = {
@@ -322,12 +338,15 @@ class EngineerFeed:
             self._temp_sum[k] += v
         self._temp_n += 1
         # Brake lockups: heavy braking with the fronts much hotter than the rears
+        front_lock = False
         if t["brake"] > self.th["lock_brake"]:
             b = t["brakesTemperature"]
             b_front_avg = (b["fl"] + b["fr"]) / 2
             b_rear_avg = (b["rl"] + b["rr"]) / 2
             if b_front_avg > b_rear_avg + self.th["lock_brake_temp_gap"]:
                 self.front_locking_events += 1
+                front_lock = True
+        self._step_episode("front_lock", front_lock, wheels={2, 3})
 
     def on_lap_data(self, ld: dict) -> None:
         lap = {
@@ -371,6 +390,7 @@ class EngineerFeed:
         self.current_lap_max_speed = 0
         self.oversteer_events = self.understeer_events = 0
         self.kerb_last_lap = self.kerb_bottoming_events = 0
+        self._reset_episodes()
 
     def on_status(self, cs: dict) -> None:
         self.status.update(
@@ -433,10 +453,60 @@ class EngineerFeed:
         self.front_locking_events = self.rear_locking_events = 0
         self.kerb_bottoming_events = self.kerb_last_lap = 0
         self.setup_changed_lap = self.lap_data.get("currentLapNum")
+        self._reset_episodes()
+
+    # ---------------------------------------------------------------- episodes
+    def _lap_num(self) -> int:
+        return int(self.lap_data.get("currentLapNum", 0) or 0)
+
+    def _episode_context(self) -> dict:
+        tel = self.telemetry or {}
+        ld = self.lap_data or {}
+        return {
+            "lap": self._lap_num(),
+            "lap_distance": float(ld.get("lapDistance", -1.0) or -1.0),
+            "speed": float(tel.get("speed", 0.0) or 0.0),
+            "g": abs(float((self.motion or {}).get("gForceLateral", 0.0) or 0.0)),
+            "in_pit": bool(ld.get("pitStatus", 0)),
+            "on_track": EV.is_on_track(tel.get("surfaceType")),
+        }
+
+    def _step_episode(self, kind: str, condition: bool, **sample) -> None:
+        """Feed one sample to an episode detector and keep the closed episode."""
+        ctx = self._episode_context()
+        ctx.update(sample)
+        ep = self.episode_trackers[kind].update(self.last_st, bool(condition), ctx)
+        if ep is not None:
+            self.episode_current[kind].append(ep.as_dict())
+
+    def _flush_episodes(self, now: float) -> dict[str, list[dict]]:
+        for kind, tracker in self.episode_trackers.items():
+            ep = tracker.flush(now)
+            if ep is not None:
+                self.episode_current[kind].append(ep.as_dict())
+        return {k: list(v) for k, v in self.episode_current.items()}
+
+    def _finish_lap_episodes(self, now: float) -> dict[str, dict]:
+        """Close every open episode at the line and return the lap's summary."""
+        current = self._flush_episodes(now)
+        summary = EV.summarize_episodes([ep for rows in current.values() for ep in rows])
+        self.episode_last_lap = summary
+        self.episode_current = {k: [] for k in EV.EPISODE_KINDS}
+        for tracker in self.episode_trackers.values():
+            tracker.reset()
+        return summary
+
+    def _reset_episodes(self) -> None:
+        self.episode_current = {k: [] for k in EV.EPISODE_KINDS}
+        self.episode_last_lap = {}
+        for tracker in self.episode_trackers.values():
+            tracker.reset()
 
     def _record_completed_lap(
         self, lap_num: int, lap_time: float, current_lap_packet: dict
     ) -> None:
+        # Close episode evidence at the line before the counters are reset.
+        lap_episodes = self._finish_lap_episodes(self.last_st)
         # Fuel used
         curr_fuel = self.status.get("fuelInTank", 0.0)
         fuel_used = (
@@ -487,6 +557,7 @@ class EngineerFeed:
                 "oversteerEvents": self.oversteer_events,
                 "understeerEvents": self.understeer_events,
                 "kerbEvents": self.kerb_bottoming_events,
+                "episodes": lap_episodes,
             }
         )
         self.current_lap_max_speed = 0
@@ -517,6 +588,11 @@ class EngineerFeed:
                 "kerbBottomingEvents": max(
                     self.kerb_bottoming_events, self.kerb_last_lap
                 ),
+                "episodes": EV.summarize_episodes(
+                    [ep for rows in self.episode_current.values() for ep in rows]
+                    + [t.active.as_dict() for t in self.episode_trackers.values() if t.active]
+                ),
+                "episodeLastLap": self.episode_last_lap,
             },
             "timestamp": self.last_st,
         }
