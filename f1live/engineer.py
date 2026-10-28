@@ -33,6 +33,7 @@ Deliberate differences from the relay, all in what it read from the packets rath
 from __future__ import annotations
 
 import math
+from collections import deque
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -244,6 +245,10 @@ class EngineerFeed:
             "rr": 0,
         }  # the relay kept every sample; sums give the same mean
         self._temp_n = 0
+        self._temp_sum_push = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+        self._temp_n_push = 0
+        self._temp_max = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+        self._temp_window: deque[tuple[float, dict]] = deque()
         self.oversteer_events = 0
         self.understeer_events = 0
         self.front_locking_events = 0
@@ -361,6 +366,17 @@ class EngineerFeed:
         for k, v in t["tyresInnerTemperature"].items():
             self._temp_sum[k] += v
         self._temp_n += 1
+        # On-track samples only: a pit-lane or garage reading must not set up
+        # the per-lap tyre-temperature average used for advice.
+        in_pit = bool(self.lap_data.get("pitStatus", 0)) or int(self.lap_data.get("driverStatus", 4) or 0) == 0
+        if float(t["speed"]) > 30 and not in_pit and EV.is_on_track(t.get("surfaceType")):
+            for k, v in t["tyresInnerTemperature"].items():
+                self._temp_sum_push[k] += v
+                self._temp_max[k] = max(self._temp_max[k], v)
+            self._temp_n_push += 1
+            self._temp_window.append((self.last_st, dict(t["tyresInnerTemperature"])))
+            while self._temp_window and self.last_st - self._temp_window[0][0] > 15.0:
+                self._temp_window.popleft()
         # Brake lockups: heavy braking with the fronts much hotter than the rears
         front_lock = False
         if t["brake"] > self.th["lock_brake"]:
@@ -434,6 +450,10 @@ class EngineerFeed:
         self.lap_start_wear = dict(self.damage.get("tyresWear", {"fl": 0, "fr": 0, "rl": 0, "rr": 0}))
         self._temp_sum = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
         self._temp_n = 0
+        self._temp_sum_push = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+        self._temp_n_push = 0
+        self._temp_max = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+        self._temp_window.clear()
         self.current_lap_max_speed = 0
         self.oversteer_events = self.understeer_events = 0
         self.kerb_last_lap = self.kerb_bottoming_events = 0
@@ -451,6 +471,10 @@ class EngineerFeed:
             self._reset_episodes()
             self._temp_sum = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
             self._temp_n = 0
+            self._temp_sum_push = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+            self._temp_n_push = 0
+            self._temp_max = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+            self._temp_window.clear()
         self._tyre_compound_last = compound
         self._tyre_age_last = age
         self.status.update(
@@ -532,6 +556,24 @@ class EngineerFeed:
             "on_track": EV.is_on_track(tel.get("surfaceType")),
         }
 
+    def _on_track_sample(self, min_kmh: float = 30.0) -> bool:
+        tel = self.telemetry or {}
+        ld = self.lap_data or {}
+        in_pit = bool(ld.get("pitStatus", 0)) or int(ld.get("driverStatus", 4) or 0) == 0
+        return (float(tel.get("speed", 0.0) or 0.0) > min_kmh and not in_pit
+                and EV.is_on_track(tel.get("surfaceType")))
+
+    def _rolling_temps(self) -> dict | None:
+        if not self._temp_window:
+            return None
+        keys = ("fl", "fr", "rl", "rr")
+        sums = {k: 0.0 for k in keys}
+        for _, temps in self._temp_window:
+            for k in keys:
+                sums[k] += float(temps.get(k, 0.0) or 0.0)
+        n = len(self._temp_window)
+        return {k: round(sums[k] / n, 1) for k in keys}
+
     def _step_episode(self, kind: str, condition: bool, **sample) -> None:
         """Feed one sample to an episode detector and keep the closed episode."""
         ctx = self._episode_context()
@@ -598,13 +640,23 @@ class EngineerFeed:
             for k in ["fl", "fr", "rl", "rr"]
         }
         self.lap_start_wear = dict(curr_wear)
-        # Average inner tyre temps
+        # Average inner tyre temps. On-track push-lap samples win; the old
+        # all-sample sum is kept only as a fallback for a lap with no usable
+        # on-track data.
         avg_temps = {"fl": 100, "fr": 100, "rl": 100, "rr": 100}
-        if self._temp_n:
+        if self._temp_n_push:
+            for k in avg_temps:
+                avg_temps[k] = round(self._temp_sum_push[k] / self._temp_n_push, 1)
+        elif self._temp_n:
             for k in avg_temps:
                 avg_temps[k] = round(self._temp_sum[k] / self._temp_n, 1)
+        max_temps = dict(self._temp_max) if self._temp_n_push else {}
+        temp_samples = self._temp_n_push
         self._temp_sum = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
         self._temp_n = 0
+        self._temp_sum_push = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+        self._temp_n_push = 0
+        self._temp_max = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
         # Sector times (as the relay read them: from the first packet of the new lap)
         s1 = current_lap_packet.get("sector1TimeMs", 0) / 1000.0
         s2 = current_lap_packet.get("sector2TimeMs", 0) / 1000.0
@@ -626,6 +678,8 @@ class EngineerFeed:
                 "tyreWear": dict(curr_wear),
                 "tyreWearDelta": wear_delta,
                 "averageTyreTemps": avg_temps,
+                "maxTyreTemps": max_temps,
+                "tempSamples": temp_samples,
                 "tyreCompound": self.status.get("tyreCompound", "Soft"),
                 "isValid": quality["valid"],  # the lap just completed
                 "valid": quality["valid"],
@@ -676,6 +730,11 @@ class EngineerFeed:
                     + [t.active.as_dict() for t in self.episode_trackers.values() if t.active]
                 ),
                 "episodeLastLap": self.episode_last_lap,
+                "tyreTemps": {
+                    "current": dict(self.telemetry.get("tyresInnerTemperature") or {}),
+                    "rolling": self._rolling_temps(),
+                    "lapAverage": EV.temperature_summary(self.completed_laps, window=3),
+                },
             },
             "timestamp": self.last_st,
         }

@@ -31,11 +31,13 @@ def motion(slip, susp_v=(0.0, 0.0, 0.0, 0.0), glat=0.0, st=0.0):
 
 
 def telemetry(speed=100, surfaces=(0, 0, 0, 0), steer=0.2, brake=0.0,
-              brake_temp=(500, 500, 500, 500), st=0.0):
+              brake_temp=(500, 500, 500, 500), st=0.0,
+              tyre_temp=(95, 95, 95, 95)):
     p = blank(P.TELEMETRY, st)
     td = p["carTelemetryData"][0]
     td.update(speed=speed, surfaceType=list(surfaces), steer=steer, brake=brake,
-              brakesTemperature=list(brake_temp))
+              brakesTemperature=list(brake_temp),
+              tyresInnerTemperature=list(tyre_temp))
     return p
 
 
@@ -245,6 +247,27 @@ def test_lap_labels_and_last_lap():
              "setup": False, "engine": "v2", "snapshot": f.snapshot("x", {})}
     out = E.payload(entry, "a", [])
     assert out["car"]["lastLap"]["label"] == "In lap"
+
+
+def test_pit_temperature_does_not_pollute_lap_average():
+    f = E.EngineerFeed()
+    f.feed(lap(4, 0, num=1, st=0.0), 0)
+    for i in range(4):
+        f.feed(telemetry(100, st=0.1 + i * 0.1, tyre_temp=(98, 98, 98, 98)), 0)
+    f.feed(lap(4, 1, num=1, st=0.6), 0)          # pit lane
+    f.feed(telemetry(50, st=0.6, tyre_temp=(150, 150, 150, 150)), 0)
+    f.feed(lap(4, 0, num=1, st=0.7), 0)
+    f.feed(telemetry(100, st=0.7, tyre_temp=(98, 98, 98, 98)), 0)
+    f.feed(lap(4, 0, num=2, last=90.0, st=1.0), 0)
+    lap_row = f.snapshot("x", {})["completedLaps"][-1]
+    assert lap_row["averageTyreTemps"]["fl"] < 105
+    assert lap_row["maxTyreTemps"]["fl"] == 98
+    assert lap_row["tempSamples"] >= 4
+    # a normal flying lap after it is usable by the summary
+    f.feed(telemetry(100, st=1.1, tyre_temp=(98, 98, 98, 98)), 0)
+    f.feed(lap(4, 0, num=3, last=90.0, st=1.2), 0)
+    summary = EV.temperature_summary(f.snapshot("x", {})["completedLaps"], window=3)
+    assert summary["front_avg"] == 98.0
 
 
 if __name__ == "__main__":
