@@ -433,6 +433,18 @@ def test_setup_generation_ignores_noise_and_tracks_real_changes():
     assert result["evidence"]["laps"]["push"] == 0
 
 
+def test_untimed_out_lap_does_not_leak_into_next_lap():
+    f = E.EngineerFeed()
+    f.feed(lap(4, 0, num=1, st=0.0), 0)
+    f.feed(telemetry(100, st=0.1, tyre_temp=(150, 150, 150, 150)), 0)
+    f.feed(lap(4, 0, num=2, last=0.0, st=0.2), 0)   # untimed out lap: discard
+    f.feed(telemetry(100, st=0.3, tyre_temp=(98, 98, 98, 98)), 0)
+    f.feed(lap(4, 0, num=3, last=90.0, st=0.4), 0)
+    lap_row = f.snapshot("x", {})["completedLaps"][-1]
+    assert lap_row["averageTyreTemps"]["fl"] == 98
+    assert lap_row["episodes"]["oversteer"]["count"] == 0
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

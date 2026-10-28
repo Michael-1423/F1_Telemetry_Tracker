@@ -429,11 +429,16 @@ class EngineerFeed:
         prev_lap_num = self.lap_data.get("currentLapNum", 1)
         # Did we just cross the line into a new lap?
         crossed = lap["currentLapNum"] > prev_lap_num
-        if crossed and lap["lastLapTime"] > 0:
-            if self._partial_lap:
-                self._start_first_full_lap()
+        if crossed:
+            if lap["lastLapTime"] > 0:
+                if self._partial_lap:
+                    self._start_first_full_lap()
+                else:
+                    self._record_completed_lap(prev_lap_num, lap["lastLapTime"], lap)
             else:
-                self._record_completed_lap(prev_lap_num, lap["lastLapTime"], lap)
+                # Out-laps and abandoned laps are not timed by the game. Drop
+                # their evidence so it cannot leak into the next push lap.
+                self._discard_lap_evidence()
         self.lap_data.update(lap)
         if crossed:
             # The new lap starts now; remember how it started for the next line.
@@ -452,6 +457,9 @@ class EngineerFeed:
         """Crossing the line after joining mid-lap: drop what was counted on the partial lap and start the
         per-lap measurements (fuel, wear, temperatures, detectors) from here."""
         self._partial_lap = False
+        self._reset_lap_accumulators()
+
+    def _reset_lap_accumulators(self) -> None:
         self.lap_start_fuel = self.status.get("fuelInTank", 0.0)
         self.lap_start_wear = dict(self.damage.get("tyresWear", {"fl": 0, "fr": 0, "rl": 0, "rr": 0}))
         self._temp_sum = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
@@ -462,8 +470,14 @@ class EngineerFeed:
         self._temp_window.clear()
         self.current_lap_max_speed = 0
         self.oversteer_events = self.understeer_events = 0
+        self.front_locking_events = self.rear_locking_events = 0
         self.kerb_last_lap = self.kerb_bottoming_events = 0
         self._reset_episodes()
+
+    def _discard_lap_evidence(self) -> None:
+        self._finish_lap_episodes(self.last_st)
+        self.episode_last_lap = {}
+        self._reset_lap_accumulators()
 
     def on_status(self, cs: dict) -> None:
         compound = TYRE_COMPOUNDS.get(cs["visualTyreCompound"], "Dry")
@@ -2174,7 +2188,7 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
     out["car"] = {
         "session": snap["session"],
         "telemetry": snap["telemetry"],
-        "motion": {"gForceLateral": snap["motion"]["gForceLateral"]},
+        "motion": {"gForceLateral": (snap.get("motion") or {}).get("gForceLateral", 0.0)},
         "status": snap["status"],
         "damage": snap["damage"],
         "lapData": snap["lapData"],
@@ -2188,7 +2202,9 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
         "recentLaps": laps[-5:],
         "lastLap": ({
             "number": last_lap.get("lapNumber"),
-            "label": last_lap.get("label") or "Lap",
+            "label": last_lap.get("label") or {
+                "out": "Out lap", "in": "In lap", "flying": "Flying lap",
+            }.get(last_lap.get("kind"), "Lap"),
             "kind": last_lap.get("kind"),
             "valid": last_lap.get("valid", last_lap.get("isValid", True)),
             "push": last_lap.get("push"),
