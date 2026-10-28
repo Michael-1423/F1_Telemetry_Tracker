@@ -263,6 +263,8 @@ class EngineerFeed:
         self.episode_current: dict[str, list[dict]] = {k: [] for k in EV.EPISODE_KINDS}
         self.episode_last_lap: dict[str, dict] = {}
         self.tyre_generation = 0
+        self.setup_generation = 0
+        self.setup_history: list[dict] = []
         self._tyre_compound_last: str | None = None
         self._tyre_age_last: int | None = None
         self._lap_start_pit = False
@@ -530,7 +532,16 @@ class EngineerFeed:
             "ballast": su["ballast"],
             "fuelLoad": round(su["fuelLoad"], 1),
         }
-        if old and _handling(old) != _handling(self.setup):
+        changed = EV.setup_diff(old, self.setup) if old else {}
+        if changed:
+            self.setup_generation += 1
+            self.setup_history.append({
+                "lap": self._lap_num(),
+                "st": self.last_st,
+                "changed": changed,
+                "setup": dict(self.setup),
+            })
+            self.setup_history = self.setup_history[-20:]
             self._restart_evidence()
 
     def _restart_evidence(self) -> None:
@@ -729,6 +740,7 @@ class EngineerFeed:
                 "kerbEvents": self.kerb_bottoming_events,
                 "episodes": lap_episodes,
                 "tyreGeneration": self.tyre_generation,
+                "setup_generation": self.setup_generation,
             }
         )
         self.current_lap_max_speed = 0
@@ -751,6 +763,8 @@ class EngineerFeed:
             "participants": [],
             "setupChangedLap": self.setup_changed_lap,
             "tyreGeneration": self.tyre_generation,
+            "setupGeneration": self.setup_generation,
+            "setupHistory": self.setup_history[-10:],
             "lastLap": self.last_lap_quality,
             "diagnostics": {
                 "oversteerEvents": self.oversteer_events,

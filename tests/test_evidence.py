@@ -406,6 +406,33 @@ def test_contact_spins_are_not_used_as_setup_evidence():
     assert result["balanceScore"] >= 0  # no oversteer bias from the contact spins
 
 
+def test_setup_generation_ignores_noise_and_tracks_real_changes():
+    base = {
+        "frontWing": 7, "rearWing": 7, "onThrottle": 60, "offThrottle": 55,
+        "frontCamber": -3.0, "rearCamber": -1.5, "frontToe": 0.05, "rearToe": 0.30,
+        "frontSuspension": 3, "rearSuspension": 3, "frontAntiRollBar": 5,
+        "rearAntiRollBar": 5, "frontSuspensionHeight": 3, "rearSuspensionHeight": 4,
+        "brakePressure": 95, "brakeBias": 55, "frontLeftTyrePressure": 23.0,
+        "frontRightTyrePressure": 23.0, "rearLeftTyrePressure": 21.0,
+        "rearRightTyrePressure": 21.0, "ballast": 5, "fuelLoad": 20.0,
+    }
+    f = E.EngineerFeed()
+    f.on_setup(base)
+    assert f.setup_generation == 0
+    f.on_setup({**base, "fuelLoad": 18.5})
+    f.on_setup({**base, "frontCamber": -3.004})
+    assert f.setup_generation == 0
+    f.on_setup({**base, "frontWing": 8})
+    assert f.setup_generation == 1
+    assert f.setup_history[-1]["changed"]["frontWing"] == {"old": 7, "new": 8}
+
+    # old-setup laps are not consulted by v2
+    snap = _v2_snapshot()
+    snap["setupGeneration"] = 1
+    result = E.analyze_v2(snap)
+    assert result["evidence"]["laps"]["push"] == 0
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
