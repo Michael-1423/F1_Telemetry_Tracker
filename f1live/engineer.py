@@ -962,6 +962,114 @@ def _driving_style_recommendations(
 
 # ------------------------------------------------------------------------------------ setup engine
 def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
+    """Frozen v1 engine (byte-compatible with the original TypeScript app)."""
+    return _analyze_impl(snapshot, active_feedback, enhanced=False)
+
+
+def analyze_v2(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
+    """Evidence-based engine used by the Engineer page.
+
+    Builds a filtered v1-shaped snapshot from episode/lap evidence, then runs the
+    same rule set so the output stays compatible with the existing UI. v1 remains
+    available for the golden tests and for ``[engineer] engine = "v1"``.
+    """
+    fb = list(active_feedback or [])
+    laps_all = list(snapshot.get("completedLaps") or [])
+    generation = snapshot.get("setupGeneration")
+    window = EV.episode_window(laps_all, window=3, generation=generation)
+    push_laps = [l for l in laps_all
+                 if EV.lap_is_push(l)
+                 and (generation is None or l.get("setup_generation") is None
+                      or int(l["setup_generation"]) == int(generation))]
+    wear = EV.wear_estimate(laps_all, generation=generation)
+    temps = EV.temperature_summary(laps_all, window=3, generation=generation)
+    diag = dict(snapshot.get("diagnostics") or {})
+    diag.update({
+        "oversteerEvents": window["oversteer"]["count"],
+        "understeerEvents": window["understeer"]["count"],
+        "frontLockingEvents": window["front_lock"]["count"],
+        "rearLockingEvents": window["rear_lock"]["count"],
+        "kerbBottomingEvents": window["kerb"]["count"],
+        "spinEvents": diag.get("soloSpinEvents", diag.get("spinEvents", 0)),
+        "episodeWindow": window,
+    })
+    snap = dict(snapshot)
+    snap["diagnostics"] = diag
+    snap["completedLaps"] = push_laps
+    tel = dict(snap.get("telemetry") or {})
+    if temps and temps.get("avg"):
+        tel["tyresInnerTemperature"] = dict(temps["avg"])
+    snap["telemetry"] = tel
+
+    config = snapshot.get("engineerConfig") or {}
+    kind = _session_kind(snapshot)
+    remaining = _laps_remaining(snapshot) if kind == "race" else 0
+    peak_wear = max((snapshot.get("damage", {}).get("tyresWear") or {0: 0}).values(), default=0)
+    rate = max(wear.get("front_rate") or 0.0, wear.get("rear_rate") or 0.0)
+    projected = peak_wear + rate * max(0, remaining)
+    high_wear_trigger = bool(
+        wear.get("laps", 0) >= 2 and
+        (rate >= float(config.get("high_wear_rate_pct_per_lap", 1.2))
+         or (kind == "race" and projected >= float(config.get("high_wear_projected_pct", 80))))
+    )
+    high_speed = [ep for ep in window["oversteer"]["episodes"]
+                  if float(ep.get("max_speed_kmh") or 0) >= float(config.get("high_speed_kmh", 180))]
+    high_speed_trigger = bool(len(high_speed) >= 2)
+    top_speed_trigger, top_speed_note = _top_speed_deficit(push_laps, config)
+    evidence = {
+        "laps": {"push": len(push_laps), "all": len(laps_all)},
+        "episodes": window,
+        "wear": wear,
+        "temperatures": temps,
+        "high_speed_episodes": len(high_speed),
+        "high_wear_trigger": high_wear_trigger,
+        "high_speed_trigger": high_speed_trigger,
+        "top_speed_trigger": top_speed_trigger,
+        "top_speed_note": top_speed_note,
+        "laps_remaining": remaining,
+    }
+    snap["_evidence"] = evidence
+    result = _analyze_impl(snap, fb, enhanced=True)
+    result["engine"] = "v2"
+    result["evidence"] = evidence
+    result["provisional"] = len(push_laps) < int(config.get("min_clean_laps", 2))
+    result["confidence"] = round(min(
+        wear.get("confidence") or 0.0,
+        0.4 + 0.15 * len(push_laps),
+    ), 2)
+    return result
+
+
+def _laps_remaining(snapshot: dict) -> int:
+    try:
+        current = max(1, int((snapshot.get("lapData") or {}).get("currentLapNum", 1) or 1))
+        total = int((snapshot.get("session") or {}).get("totalLaps", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, total - current)
+
+
+def _top_speed_deficit(laps: list[dict], config: dict) -> tuple[bool, str | None]:
+    """Very conservative straight-line deficit check.
+
+    A lower recent max speed can just be fuel, tow, DRS or traffic, so this is
+    only a low-priority hint and is never treated as hard setup evidence.
+    """
+    values = [float(l.get("maxSpeedKmh") or 0) for l in laps if l.get("maxSpeedKmh")]
+    need = int(config.get("top_speed_min_laps", 3))
+    if len(values) < need:
+        return False, None
+    baseline = max(values[:-1])
+    recent = max(values[-(max(1, need - 1)):])
+    deficit = baseline - recent
+    threshold = float(config.get("top_speed_deficit_kmh", 8))
+    if deficit >= threshold:
+        return True, f"recent max speed {recent:.0f} km/h vs session best {baseline:.0f} km/h"
+    return False, None
+
+
+def _analyze_impl(snapshot: dict, active_feedback: list[str] | None = None,
+                  enhanced: bool = False) -> dict:
     """analyzeTelemetryAndGenerateSetup(snapshot, activeFeedback) from engineer_engine.ts."""
     fb = list(active_feedback or [])
     current_setup = dict(snapshot["setup"])
@@ -1001,7 +1109,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     front_lock_count = diag.get("frontLockingEvents") or 0
     kerb_hits = diag.get("kerbBottomingEvents") or 0
     spin_events = diag.get("spinEvents") or 0
-    oversteer_count += spin_events * 3
+    oversteer_count += spin_events * (1 if enhanced else 3)
     # Behavioural evidence is useful even when the lap was invalid.
     # Invalid laps must not affect lap-time/pace analysis, but events such
     # as oversteer, understeer still describe the car's
@@ -1014,9 +1122,12 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
         for lap in snapshot.get("completedLaps", [])
         if changed is None or lap.get("lapNumber", 0) >= changed
     ]
-    for lap in laps[-3:]:
-        oversteer_count += lap.get("oversteerEvents", 0) or 0
-        understeer_count += lap.get("understeerEvents", 0) or 0
+    if not enhanced:
+        for lap in laps[-3:]:
+            oversteer_count += lap.get("oversteerEvents", 0) or 0
+            understeer_count += lap.get("understeerEvents", 0) or 0
+    rear_lock_count = diag.get("rearLockingEvents") or 0
+    evidence = snapshot.get("_evidence") or {}
 
     balance = 0  # negative = oversteer, positive = understeer
     corner_profile = snapshot.get("cornerProfile") or snapshot.get("corner_profile") or []
@@ -1143,7 +1254,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
             )
 
     # DIAGNOSTIC 3: High-speed instability
-    if "high_speed_snap" in fb:
+    if "high_speed_snap" in fb or (enhanced and evidence.get("high_speed_trigger")):
         issues.append(
             {
                 "title": "Aerodynamic & High-Speed Instability",
@@ -1243,7 +1354,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
                 "High",
             )
 
-    if "rear_locking" in fb:
+    if "rear_locking" in fb or (enhanced and rear_lock_count > 1):
         issues.append(
             {
                 "title": "Rear Axle Snapping Under Braking",
@@ -1324,7 +1435,13 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
         rear_current_wear,
     )
 
-    if "high_tyre_wear" in fb:
+    wear_ev = evidence.get("wear") if enhanced else None
+    if wear_ev and wear_ev.get("laps"):
+        recent_wear_laps = wear_ev.get("samples") or []
+        front_wear_rate = wear_ev.get("front_rate") or 0.0
+        rear_wear_rate = wear_ev.get("rear_rate") or 0.0
+
+    if "high_tyre_wear" in fb or (enhanced and evidence.get("high_wear_trigger")):
         if recent_wear_laps:
             wear_description = (
                 f"Recent tyre wear is approximately "
@@ -1558,7 +1675,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
             )
 
     # DIAGNOSTIC 8: Straight-line speed deficit
-    if "lacking_top_speed" in fb:
+    if "lacking_top_speed" in fb or (enhanced and evidence.get("top_speed_trigger")):
         issues.append(
             {
                 "title": "Excessive Aerodynamic Drag",
@@ -1628,8 +1745,13 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     elif balance >= 2:
         label = "Mild Understeer"
 
+    brief_wear = None
+    if enhanced and evidence.get("wear"):
+        brief_wear = max(evidence["wear"].get("front_rate") or 0.0,
+                         evidence["wear"].get("rear_rate") or 0.0) or None
     briefing = session_briefing(
-        snapshot, label, recommendations[0] if recommendations else None
+        snapshot, label, recommendations[0] if recommendations else None,
+        wear_per_lap=brief_wear,
     )
     result = {
         "radioMessage": briefing["radioMessage"],
@@ -1719,7 +1841,8 @@ def _race_fuel_call(fuel_delta: float, laps_remaining: int) -> str:
 
 
 def session_briefing(
-    snapshot: dict, balance_label: str, top: dict | None = None
+    snapshot: dict, balance_label: str, top: dict | None = None,
+    wear_per_lap: float | None = None,
 ) -> dict:
     """buildSessionBriefing(snapshot, balanceLabel, topSetupRecommendation) from strategy.ts."""
     kind = _session_kind(snapshot)
@@ -1782,7 +1905,7 @@ def session_briefing(
         total_laps = max(current_lap, snapshot["session"]["totalLaps"])
         laps_remaining = max(0, total_laps - current_lap)
         wear = _max_tyre_wear(snapshot)
-        wear_per_lap = _recent_wear_per_lap(snapshot)
+        wear_per_lap = wear_per_lap if wear_per_lap is not None else _recent_wear_per_lap(snapshot)
         peak_temp = max(snapshot["telemetry"]["tyresInnerTemperature"].values())
         dmg = snapshot["damage"]
         wing_damage = max(
@@ -1877,10 +2000,12 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
             "color": L.TEAM_COLORS.get(c.team, "#888"),
             "own": c.own,
             "setup": bool(feed and feed.setup),
+            "engine": str((s.engineer_th or {}).get("engine", "v2")),
         }
         roster.append(row)
         snap = feed.snapshot(name, sess) if feed else None
         if snap is not None:
+            snap["engineerConfig"] = dict(s.engineer_th or {})
             snap["cornerProfile"] = s.corner_profile(c)
             snap["drivingStyle"] = s.style_metrics(c)
             # Keep the in-progress 5 m trace separate from completed-lap analysis so the
@@ -1955,8 +2080,10 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
         "liveLap": snap.get("liveLap", {}),
     }
     if snap["setup"]:
+        engine = str(entry.get("engine", "v2"))
+        out["engine"] = engine
         try:
-            out["analysis"] = analyze(snap, fb)
+            out["analysis"] = analyze_v2(snap, fb) if engine == "v2" else analyze(snap, fb)
         except Exception as e:  # never break a driver's live stream over one bad sample
             out["error"] = f"analysis failed: {e!r}"
     return out

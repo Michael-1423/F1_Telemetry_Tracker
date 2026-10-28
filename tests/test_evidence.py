@@ -3,6 +3,8 @@
 Run directly:  python3 tests/test_evidence.py
 """
 
+import copy
+import json
 import os
 import struct
 import sys
@@ -297,6 +299,48 @@ def test_wear_estimate_ignores_outliers_and_uses_push_laps():
     # a setup generation filters out the old setup's laps
     w = EV.wear_estimate(laps, generation=1)
     assert w["laps"] == 0
+
+
+def _v2_snapshot():
+    with open(os.path.join(os.path.dirname(__file__), "engineer_golden.json"), encoding="utf-8") as f:
+        snap = copy.deepcopy(json.load(f)["cases"][0]["snapshot"])
+    snap["session"].update(sessionType="Practice 1", sessionTypeId=1, totalLaps=99, trackLength=5000)
+    snap["lapData"].update(currentLapNum=5)
+    snap["damage"]["tyresWear"] = {"fl": 30.0, "fr": 30.0, "rl": 20.0, "rr": 20.0}
+    snap["completedLaps"] = []
+    for n in range(1, 4):
+        over = [EV.Episode("oversteer", float(i), float(i) + 0.1, n,
+                           max_speed_kmh=220 if n < 3 else 100) for i in range(2)]
+        snap["completedLaps"].append({
+            "lapNumber": n, "lap": n, "isValid": True, "valid": True,
+            "kind": "flying", "push": True, "clean": True, "setup_generation": 0,
+            "lapTime": 90.0, "maxSpeedKmh": 300 if n == 1 else 285,
+            "tyreWearDelta": {"fl": 2.0, "fr": 2.0, "rl": 0.8, "rr": 0.8},
+            "averageTyreTemps": {"fl": 100, "fr": 100, "rl": 98, "rr": 98},
+            "episodes": EV.summarize_episodes(over),
+        })
+    snap["setupGeneration"] = 0
+    snap["engineerConfig"] = {"engine": "v2"}
+    return snap
+
+
+def test_analyze_v2_uses_evidence_and_triggers_high_wear():
+    result = E.analyze_v2(_v2_snapshot())
+    assert result["engine"] == "v2"
+    assert result["evidence"]["wear"]["laps"] == 3
+    assert result["evidence"]["high_wear_trigger"] is True
+    assert any(i["title"] == "High Tyre Wear / Degradation" for i in result["diagnosedIssues"])
+    assert any(i["title"] == "Aerodynamic & High-Speed Instability" for i in result["diagnosedIssues"])
+
+
+def test_analyze_v2_top_speed_hint():
+    snap = _v2_snapshot()
+    snap["completedLaps"][0]["maxSpeedKmh"] = 310
+    snap["completedLaps"][1]["maxSpeedKmh"] = 290
+    snap["completedLaps"][2]["maxSpeedKmh"] = 290
+    result = E.analyze_v2(snap)
+    assert result["evidence"]["top_speed_trigger"] is True
+    assert any(i["title"] == "Excessive Aerodynamic Drag" for i in result["diagnosedIssues"])
 
 
 if __name__ == "__main__":
