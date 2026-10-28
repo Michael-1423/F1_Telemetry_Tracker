@@ -23,31 +23,32 @@ def blank(pid: int, st: float = 0.0, player: int = 0) -> dict:
     return p
 
 
-def motion(slip, susp_v=(0.0, 0.0, 0.0, 0.0), glat=0.0):
-    p = blank(P.MOTION)
+def motion(slip, susp_v=(0.0, 0.0, 0.0, 0.0), glat=0.0, st=0.0):
+    p = blank(P.MOTION, st)
     p["wheelSlip"], p["suspensionVelocity"] = list(slip), list(susp_v)
     p["carMotionData"][0]["gForceLateral"] = glat
     return p
 
 
 def telemetry(speed=100, surfaces=(0, 0, 0, 0), steer=0.2, brake=0.0,
-              brake_temp=(500, 500, 500, 500)):
-    p = blank(P.TELEMETRY)
+              brake_temp=(500, 500, 500, 500), st=0.0):
+    p = blank(P.TELEMETRY, st)
     td = p["carTelemetryData"][0]
     td.update(speed=speed, surfaceType=list(surfaces), steer=steer, brake=brake,
               brakesTemperature=list(brake_temp))
     return p
 
 
-def lap(status=4, pit=0, distance=100.0, num=1):
-    p = blank(P.LAP)
+def lap(status=4, pit=0, distance=100.0, num=1, last=0.0, invalid=0, st=0.0):
+    p = blank(P.LAP, st)
     p["lapData"][0].update(currentLapNum=num, driverStatus=status, pitStatus=pit,
-                           lapDistance=distance)
+                           lapDistance=distance, lastLapTime=last,
+                           currentLapInvalid=invalid)
     return p
 
 
-def status(compound=16, age=5, wear=(0, 0, 0, 0)):
-    p = blank(P.STATUS)
+def status(compound=16, age=5, wear=(0, 0, 0, 0), st=0.0):
+    p = blank(P.STATUS, st)
     p["carStatusData"][0].update(visualTyreCompound=compound, tyresAgeLaps=age,
                                  tyresWear=list(wear), fuelInTank=20.0,
                                  fuelRemainingLaps=10.0)
@@ -210,6 +211,40 @@ def test_tyre_change_resets_episode_evidence():
     snap = f.snapshot("x", {})
     assert snap["diagnostics"]["episodes"]["oversteer"]["count"] == 0
     assert snap["tyreGeneration"] == 1
+
+
+def test_lap_labels_and_last_lap():
+    f = E.EngineerFeed()
+    f.feed(lap(4, 0, num=1, st=0.0), 0)
+    f.feed(telemetry(100, st=0.0), 0)
+    f.feed(lap(4, 0, num=2, last=90.0, st=1.0), 0)
+    snap = f.snapshot("x", {})
+    assert snap["lastLap"]["label"] == "Flying lap"
+    assert snap["lastLap"]["push"] is True
+    assert snap["completedLaps"][-1]["kind"] == "flying"
+
+    # an in-lap
+    f.feed(lap(2, 0, num=2, st=2.0), 0)
+    f.feed(lap(4, 0, num=3, last=100.0, st=3.0), 0)
+    assert f.snapshot("x", {})["lastLap"]["label"] == "In lap"
+    assert f.snapshot("x", {})["completedLaps"][-1]["push"] is False
+
+    # an out-lap
+    f.feed(lap(3, 0, num=3, st=4.0), 0)
+    f.feed(lap(4, 0, num=4, last=95.0, st=5.0), 0)
+    assert f.snapshot("x", {})["lastLap"]["label"] == "Out lap"
+
+    # a lap that entered the pit lane
+    f.feed(lap(4, 1, num=4, st=6.0), 0)
+    f.feed(lap(4, 0, num=5, last=95.0, st=7.0), 0)
+    assert f.snapshot("x", {})["lastLap"]["label"] == "In lap"
+    assert f.snapshot("x", {})["lastLap"]["pit"] is True
+
+    # the payload carries the label to the Engineer page
+    entry = {"idx": 0, "name": "A", "team": "T", "color": "#888", "own": True,
+             "setup": False, "engine": "v2", "snapshot": f.snapshot("x", {})}
+    out = E.payload(entry, "a", [])
+    assert out["car"]["lastLap"]["label"] == "In lap"
 
 
 if __name__ == "__main__":

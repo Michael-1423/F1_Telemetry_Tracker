@@ -258,6 +258,12 @@ class EngineerFeed:
         self.tyre_generation = 0
         self._tyre_compound_last: str | None = None
         self._tyre_age_last: int | None = None
+        self._lap_start_pit = False
+        self._lap_start_status: int | None = 4
+        self._lap_had_pit = False
+        self._lap_had_out = False
+        self._lap_had_in = False
+        self.last_lap_quality: dict | None = None
         self.setup_changed_lap: int | None = (
             None  # lap of the last setup change (counters restart there)
         )
@@ -391,16 +397,34 @@ class EngineerFeed:
             # full lap with half a lap of evidence and the whole stint's tyre wear. Wait for the next line.
             self._lap_seen = True
             self._partial_lap = lap["currentLapTime"] > 1.0
+            self._lap_start_pit = bool(lap["pitStatus"])
+            self._lap_start_status = lap["driverStatus"]
+            self._lap_had_pit = bool(lap["pitStatus"])
+            self._lap_had_out = lap["driverStatus"] == 3
+            self._lap_had_in = lap["driverStatus"] == 2
             self.lap_data.update(lap)
             return
         prev_lap_num = self.lap_data.get("currentLapNum", 1)
         # Did we just cross the line into a new lap?
-        if lap["currentLapNum"] > prev_lap_num and lap["lastLapTime"] > 0:
+        crossed = lap["currentLapNum"] > prev_lap_num
+        if crossed and lap["lastLapTime"] > 0:
             if self._partial_lap:
                 self._start_first_full_lap()
             else:
                 self._record_completed_lap(prev_lap_num, lap["lastLapTime"], lap)
         self.lap_data.update(lap)
+        if crossed:
+            # The new lap starts now; remember how it started for the next line.
+            self._lap_start_pit = bool(lap["pitStatus"])
+            self._lap_start_status = lap["driverStatus"]
+            self._lap_had_pit = bool(lap["pitStatus"])
+            self._lap_had_out = lap["driverStatus"] == 3
+            self._lap_had_in = lap["driverStatus"] == 2
+        elif lap["pitStatus"]:
+            self._lap_had_pit = True
+        if not crossed:
+            self._lap_had_out = self._lap_had_out or lap["driverStatus"] == 3
+            self._lap_had_in = self._lap_had_in or lap["driverStatus"] == 2
 
     def _start_first_full_lap(self) -> None:
         """Crossing the line after joining mid-lap: drop what was counted on the partial lap and start the
@@ -544,6 +568,21 @@ class EngineerFeed:
     ) -> None:
         # Close episode evidence at the line before the counters are reset.
         lap_episodes = self._finish_lap_episodes(self.last_st)
+        invalid = bool(self.lap_data.get("isCurrentLapInvalid", False))
+        quality = EV.classify_lap(
+            self._lap_start_pit,
+            bool(self.lap_data.get("pitStatus", 0)),
+            self._lap_start_status,
+            self.lap_data.get("driverStatus"),
+            invalid,
+            self._lap_had_pit,
+            self._lap_had_out,
+            self._lap_had_in,
+        )
+        best_clean = min((l["lapTime"] for l in self.completed_laps if l.get("clean")), default=None)
+        clean = bool(quality["push"] and (best_clean is None or lap_time < best_clean * 1.07))
+        quality["clean"] = clean
+        self.last_lap_quality = {"lapNumber": lap_num, "lapTime": lap_time, **quality}
         # Fuel used
         curr_fuel = self.status.get("fuelInTank", 0.0)
         fuel_used = (
@@ -588,9 +627,13 @@ class EngineerFeed:
                 "tyreWearDelta": wear_delta,
                 "averageTyreTemps": avg_temps,
                 "tyreCompound": self.status.get("tyreCompound", "Soft"),
-                "isValid": not self.lap_data.get(
-                    "isCurrentLapInvalid", False
-                ),  # the lap just completed
+                "isValid": quality["valid"],  # the lap just completed
+                "valid": quality["valid"],
+                "kind": quality["kind"],
+                "pit": quality["pit"],
+                "push": quality["push"],
+                "clean": quality["clean"],
+                "label": quality["label"],
                 "oversteerEvents": self.oversteer_events,
                 "understeerEvents": self.understeer_events,
                 "kerbEvents": self.kerb_bottoming_events,
@@ -618,6 +661,7 @@ class EngineerFeed:
             "participants": [],
             "setupChangedLap": self.setup_changed_lap,
             "tyreGeneration": self.tyre_generation,
+            "lastLap": self.last_lap_quality,
             "diagnostics": {
                 "oversteerEvents": self.oversteer_events,
                 "understeerEvents": self.understeer_events,
@@ -1822,6 +1866,7 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
     if snap is None:
         return out
     laps = snap["completedLaps"]
+    last_lap = laps[-1] if laps else None
     out["car"] = {
         "session": snap["session"],
         "telemetry": snap["telemetry"],
@@ -1837,6 +1882,14 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
             (l["lapTime"] for l in laps if l["isValid"] and l["lapTime"] > 0), default=0
         ),
         "recentLaps": laps[-5:],
+        "lastLap": ({
+            "number": last_lap.get("lapNumber"),
+            "label": last_lap.get("label") or "Lap",
+            "kind": last_lap.get("kind"),
+            "valid": last_lap.get("valid", last_lap.get("isValid", True)),
+            "push": last_lap.get("push"),
+            "time": last_lap.get("lapTime"),
+        } if last_lap else None),
         "setupChangedLap": snap.get("setupChangedLap"),
         "liveTrace": snap.get("liveTrace", []),
         "liveLap": snap.get("liveLap", {}),

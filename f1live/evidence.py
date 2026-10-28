@@ -207,16 +207,17 @@ def lap_is_push(lap: dict) -> bool:
 
 
 def classify_lap(start_pit: bool, end_pit: bool, start_status: int | None,
-                 end_status: int | None, invalid: bool, had_pit: bool = False) -> dict:
+                 end_status: int | None, invalid: bool, had_pit: bool = False,
+                 had_out: bool = False, had_in: bool = False) -> dict:
     """Label a completed practice/qualifying lap as out / flying / in.
 
     ``driverStatus``: 0 garage, 1 flying lap, 2 in lap, 3 out lap, 4 on track.
     The game only counts timed laps, but an in-lap can still be recorded if the
     game gives it a last lap time; this keeps it out of the evidence.
     """
-    if bool(start_pit) or start_status == 3:
+    if bool(start_pit) or start_status == 3 or had_out:
         kind = "out"
-    elif bool(end_pit) or end_status == 2:
+    elif bool(end_pit) or end_status == 2 or had_in:
         kind = "in"
     else:
         kind = "flying"
