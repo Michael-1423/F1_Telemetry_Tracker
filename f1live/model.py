@@ -489,9 +489,10 @@ class Session:
                                          "sessionDuration", "pitSpeedLimit", "networkGame", "formula")}
         self.info["forecast"] = p["weatherForecastSamples"][: p["numWeatherForecastSamples"]]
         self.info["marshalFlags"] = [z["zoneFlag"] for z in p["marshalZones"][: p["numMarshalZones"]]]
+        sc = p["safetyCarStatus"] if p["safetyCarStatus"] in L.SAFETY_CAR else 0   # 3 = formation lap
         if not first:
-            if p["safetyCarStatus"] != self.sc_status:
-                old, new = self.sc_status, p["safetyCarStatus"]
+            if sc != self.sc_status:
+                old, new = self.sc_status, sc
                 if new:
                     self.emit("race_control", "race", [], f"{L.SAFETY_CAR[new]} deployed")
                     for c in self.cars:
@@ -502,7 +503,7 @@ class Session:
                 self.emit("race_control", "race", [], f"Weather now {L.WEATHER.get(p['weather'], p['weather'])}")
             if bool(p["gamePaused"]) != self.paused:
                 self.emit("race_control", "info", [], "Game paused" if p["gamePaused"] else "Game resumed")
-        self.sc_status = p["safetyCarStatus"]
+        self.sc_status = sc
         if self.sc_status:
             for c in self.cars:
                 c.cur_lap_flags.add("sc")

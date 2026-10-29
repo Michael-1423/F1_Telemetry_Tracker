@@ -32,6 +32,7 @@ TEAM_COLORS = {
 }
 
 WEATHER = {0: "Clear", 1: "Light cloud", 2: "Overcast", 3: "Light rain", 4: "Heavy rain", 5: "Storm"}
+# F1 2020 also sends 3 during a race's formation lap (verified against real race data); that is not a safety car.
 SAFETY_CAR = {0: None, 1: "Safety Car", 2: "Virtual Safety Car"}
 FIA_FLAGS = {-1: "unknown", 0: None, 1: "green", 2: "blue", 3: "yellow", 4: "red"}
 PIT_STATUS = {0: None, 1: "pitting", 2: "in pit area"}
