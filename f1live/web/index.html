@@ -988,9 +988,10 @@ const TEL_READY=`<div class="pwc"><div class="pit-wall-grid">
   <section class="pit-panel pit-wall-laps" aria-label="Recent laps" id="pwLaps"></section></div></div>`;
 function renderLiveTrace(E){
   const host=$('reTrace'),trace=(E.car&&E.car.liveTrace)||[],lap=(E.car&&E.car.liveLap)||{},windowSeconds=+lap.traceWindow||8;
+  const lastLap=(E.car&&E.car.lastLap)||null;
   if(!host)return;
   if(trace.length<2){
-    host.innerHTML='<section class="re-trace"><div class="re-trace-h"><h4>Live brake / throttle</h4><span>Waiting for a moving time window…</span></div></section>';
+    host.innerHTML=`<section class="re-trace"><div class="re-trace-h"><h4>Live brake / throttle</h4><span>Last lap · ${esc(lastLap?lastLap.label:'–')} · waiting for a moving time window…</span></div></section>`;
     return;
   }
   const W=1440,H=300,L=52,R=16,T=22,B=34,iw=W-L-R,ih=H-T-B;
@@ -1001,12 +1002,12 @@ function renderLiveTrace(E){
   const grid=[0,.25,.5,.75,1].map(v=>`<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-8}" y="${y(v)+3}" text-anchor="end">${Math.round(v*100)}%</text>`).join('');
   const ticks=[0,.25,.5,.75,1].map(v=>`<text x="${x(minT+(maxT-minT)*v)}" y="${H-8}" text-anchor="middle">${Math.abs(maxT-(minT+(maxT-minT)*v)).toFixed(1)}s ago</text>`).join('');
   host.innerHTML=`<section class="re-trace" aria-label="Live brake and throttle graph">
-    <div class="re-trace-h"><h4>Live brake / throttle · last ${windowSeconds}s</h4><span>Lap ${lap.number||'–'} · ${lap.invalid?'invalid · ':''}rolling time window</span></div>
+    <div class="re-trace-h"><h4>Live brake / throttle · last ${windowSeconds}s</h4><span>Lap ${lap.number||'–'} · Last lap: ${esc(lastLap?lastLap.label:'–')}${lastLap&&lastLap.time?` · ${ft(lastLap.time)}`:''} · rolling time window</span></div>
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Brake and throttle pedal inputs over the last few seconds">
       ${grid}<line class="axis" x1="${L}" x2="${W-R}" y1="${T+ih}" y2="${T+ih}"/><line class="axis" x1="${L}" x2="${L}" y1="${T}" y2="${T+ih}"/>
       <path class="trace-throttle" d="${path('throttle')}"/><path class="trace-brake" d="${path('brake')}"/>
       ${ticks}
-    </svg><div class="legend"><span class="th"><b>Throttle</b></span><span class="br"><b>Brake</b></span><span class="muted">distance from start/finish</span></div>
+    </svg><div class="legend"><span class="th"><b>Throttle</b></span><span class="br"><b>Brake</b></span><span class="muted">rolling ${windowSeconds}s window</span></div>
   </section>`;
 }
 // My telemetry: the original's PitWallOverview, panel for panel, with the dial.
@@ -1068,7 +1069,7 @@ function renderTelemetry(E,checking){
     <div class="pit-tyre-grid">${['fl','fr','rl','rr'].map(k=>pwTyre(C,k)).join('')}</div>`);
   const latest=C.recentLaps.slice(-3).reverse();
   put('pwLaps',`<div class="pit-panel-heading"><h2>Recent laps</h2><span>${C.laps} logged</span></div>
-    ${latest.length?`<ol>${latest.map(l=>`<li><span>L${l.lapNumber}${l.isValid?'':' · invalid'}</span><strong>${esc(l.lapTimeFormatted)}</strong></li>`).join('')}</ol>`:'<p>First completed lap will appear here.</p>'}`);
+    ${latest.length?`<ol>${latest.map(l=>`<li><span>L${l.lapNumber} · ${esc(l.label||(l.isValid?'Valid lap':'Invalid lap'))}</span><strong>${esc(l.lapTimeFormatted)}</strong></li>`).join('')}</ol>`:'<p>First completed lap will appear here.</p>'}`);
 }
 
 function setupText(E){

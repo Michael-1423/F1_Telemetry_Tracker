@@ -31,6 +31,7 @@ include_ai_only = false   # also list incidents that involve no human driver
 sessions = ["race"]       # session kinds that list incidents
 
 [engineer]
+engine = "v2"             # "v2": episode/lap-quality engine; "v1": the original golden-compatible engine
 # Race engineer detectors, counted on every packet from each driver's own game. All but the kerb
 # threshold are the original race engineer's values.
 # oversteer_slip = 0.22        # rear wheel slip above this, and slip_ratio x the front
