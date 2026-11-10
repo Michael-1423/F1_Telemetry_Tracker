@@ -33,9 +33,11 @@ Deliberate differences from the relay, all in what it read from the packets rath
 from __future__ import annotations
 
 import math
+from collections import deque
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from . import evidence as EV
 from . import lookups as L
 from . import packets as P
 
@@ -53,6 +55,13 @@ DEFAULTS: dict[str, float] = {
     "lock_brake": 0.7,  # brake pedal above this...
     # ...with front brakes this much hotter than the rears -> front locking sample
     "lock_brake_temp_gap": 120.0,
+    # P0.2 gates: only count episodes while the car is actually racing.
+    "oversteer_min_kmh": 40.0,
+    "understeer_min_kmh": 40.0,
+    "kerb_min_kmh": 50.0,
+    "lock_min_kmh": 40.0,
+    "rear_lock_brake": 0.4,
+    "rear_lock_ratio": 0.80,
 }
 
 FEED_PACKETS = {P.MOTION, P.LAP, P.TELEMETRY, P.STATUS, P.SETUPS}
@@ -238,12 +247,32 @@ class EngineerFeed:
             "rr": 0,
         }  # the relay kept every sample; sums give the same mean
         self._temp_n = 0
+        self._temp_sum_push = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+        self._temp_n_push = 0
+        self._temp_max = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+        self._temp_window: deque[tuple[float, dict]] = deque()
         self.oversteer_events = 0
         self.understeer_events = 0
         self.front_locking_events = 0
         self.rear_locking_events = 0
         self.kerb_bottoming_events = 0  # this lap
         self.kerb_last_lap = 0  # the last completed lap
+        # Episode evidence (see f1live/evidence.py). The old counters above are
+        # kept for the frozen v1 analysis and for backwards compatibility.
+        self.episode_trackers = {k: EV.EpisodeTracker(k) for k in EV.EPISODE_KINDS}
+        self.episode_current: dict[str, list[dict]] = {k: [] for k in EV.EPISODE_KINDS}
+        self.episode_last_lap: dict[str, dict] = {}
+        self.tyre_generation = 0
+        self.setup_generation = 0
+        self.setup_history: list[dict] = []
+        self._tyre_compound_last: str | None = None
+        self._tyre_age_last: int | None = None
+        self._lap_start_pit = False
+        self._lap_start_status: int | None = 4
+        self._lap_had_pit = False
+        self._lap_had_out = False
+        self._lap_had_in = False
+        self.last_lap_quality: dict | None = None
         self.setup_changed_lap: int | None = (
             None  # lap of the last setup change (counters restart there)
         )
@@ -272,6 +301,7 @@ class EngineerFeed:
             "gForceLongitudinal": round(cm["gForceLongitudinal"], 2),
             # [RL, RR, FL, FR]
             "wheelSlip": [round(x, 4) for x in extra["wheelSlip"]],
+            "wheelSpeed": [round(x, 4) for x in extra.get("wheelSpeed", [0, 0, 0, 0])],
             "suspensionPosition": [round(x, 4) for x in extra["suspensionPosition"]],
             "suspensionVelocity": [round(x, 4) for x in extra["suspensionVelocity"]],
         }
@@ -279,26 +309,45 @@ class EngineerFeed:
         th = self.th
         # Oversteer: significant rear wheel slip; understeer: front slip with high lateral g
         slips = m["wheelSlip"]
+        oversteer = understeer = False
         if len(slips) >= 4:
             rear_slip = max(slips[0], slips[1])
             front_slip = max(slips[2], slips[3])
             lat_g = abs(m["gForceLateral"])
-            if (
+            oversteer = (
                 rear_slip > th["oversteer_slip"]
                 and rear_slip > front_slip * th["slip_ratio"]
-            ):
-                self.oversteer_events += 1
-            elif (
+            )
+            understeer = (
                 front_slip > th["understeer_slip"]
                 and front_slip > rear_slip * th["slip_ratio"]
                 and lat_g > th["understeer_lat_g"]
-            ):
+            )
+            if oversteer:
+                self.oversteer_events += 1
+            elif understeer:
                 self.understeer_events += 1
         # Kerb strikes: a wheel punched up or dropped sharply
-        if any(
-            abs(v) > th["kerb_suspension_velocity"] for v in m["suspensionVelocity"]
-        ):
+        kerb_hits = [i for i, v in enumerate(m["suspensionVelocity"])
+                     if abs(v) > th["kerb_suspension_velocity"]]
+        if kerb_hits:
             self.kerb_bottoming_events += 1
+        # Episode evidence: one contiguous run = one event, with duration/magnitude.
+        # These are gated on actually driving; the legacy counters above are left
+        # as they were for the frozen v1 analysis.
+        speed = float(self.telemetry.get("speed", 0.0) or 0.0)
+        in_pit = bool(self.lap_data.get("pitStatus", 0)) or int(self.lap_data.get("driverStatus", 4) or 0) == 0
+        on_track = EV.is_on_track(self.telemetry.get("surfaceType"))
+        over_gate = oversteer and speed > float(self.th["oversteer_min_kmh"]) and not in_pit and on_track
+        under_gate = (understeer and speed > float(self.th["understeer_min_kmh"])
+                      and not in_pit and on_track and abs(float(self.telemetry.get("steer", 0.0) or 0.0)) > 0.05)
+        kerb_gate = speed > float(self.th["kerb_min_kmh"]) and not in_pit and on_track
+        self._step_episode("oversteer", over_gate, slip=max(slips[:2] or [0]),
+                           g=abs(m["gForceLateral"]))
+        self._step_episode("understeer", under_gate, slip=max(slips[2:4] or [0]),
+                           g=abs(m["gForceLateral"]))
+        self._step_episode("kerb", bool(kerb_hits) and kerb_gate, wheels=kerb_hits)
+        self._step_rear_lock(legacy=True)
 
     def on_telemetry(self, td: dict) -> None:
         t = {
@@ -314,6 +363,7 @@ class EngineerFeed:
             "tyresInnerTemperature": _quad(td["tyresInnerTemperature"]),
             "engineTemperature": td["engineTemperature"],
             "tyresPressure": _quad(td["tyresPressure"], 1),
+            "surfaceType": list(td["surfaceType"]),
         }
         self.telemetry.update(t)
         if t["speed"] > self.current_lap_max_speed:
@@ -322,13 +372,31 @@ class EngineerFeed:
         for k, v in t["tyresInnerTemperature"].items():
             self._temp_sum[k] += v
         self._temp_n += 1
+        # On-track samples only: a pit-lane or garage reading must not set up
+        # the per-lap tyre-temperature average used for advice.
+        in_pit = bool(self.lap_data.get("pitStatus", 0)) or int(self.lap_data.get("driverStatus", 4) or 0) == 0
+        if float(t["speed"]) > 30 and not in_pit and EV.is_on_track(t.get("surfaceType")):
+            for k, v in t["tyresInnerTemperature"].items():
+                self._temp_sum_push[k] += v
+                self._temp_max[k] = max(self._temp_max[k], v)
+            self._temp_n_push += 1
+            self._temp_window.append((self.last_st, dict(t["tyresInnerTemperature"])))
+            while self._temp_window and self.last_st - self._temp_window[0][0] > 15.0:
+                self._temp_window.popleft()
         # Brake lockups: heavy braking with the fronts much hotter than the rears
+        front_lock = False
         if t["brake"] > self.th["lock_brake"]:
             b = t["brakesTemperature"]
             b_front_avg = (b["fl"] + b["fr"]) / 2
             b_rear_avg = (b["rl"] + b["rr"]) / 2
             if b_front_avg > b_rear_avg + self.th["lock_brake_temp_gap"]:
                 self.front_locking_events += 1
+                front_lock = True
+        in_pit = bool(self.lap_data.get("pitStatus", 0)) or int(self.lap_data.get("driverStatus", 4) or 0) == 0
+        front_lock = (front_lock and float(t["speed"]) > float(self.th["lock_min_kmh"])
+                      and not in_pit and EV.is_on_track(t.get("surfaceType")))
+        self._step_episode("front_lock", front_lock, wheels={2, 3})
+        self._step_rear_lock()
 
     def on_lap_data(self, ld: dict) -> None:
         lap = {
@@ -341,6 +409,8 @@ class EngineerFeed:
             "carPosition": ld["carPosition"],
             "currentLapNum": ld["currentLapNum"],
             "pitStatus": ld["pitStatus"],
+            "driverStatus": ld["driverStatus"],
+            "resultStatus": ld["resultStatus"],
             "isCurrentLapInvalid": bool(ld["currentLapInvalid"]),
             "penalties": ld["penalties"],
         }
@@ -350,37 +420,91 @@ class EngineerFeed:
             # full lap with half a lap of evidence and the whole stint's tyre wear. Wait for the next line.
             self._lap_seen = True
             self._partial_lap = lap["currentLapTime"] > 1.0
+            self._lap_start_pit = bool(lap["pitStatus"])
+            self._lap_start_status = lap["driverStatus"]
+            self._lap_had_pit = bool(lap["pitStatus"])
+            self._lap_had_out = lap["driverStatus"] == 3
+            self._lap_had_in = lap["driverStatus"] == 2
             self.lap_data.update(lap)
             return
         prev_lap_num = self.lap_data.get("currentLapNum", 1)
         # Did we just cross the line into a new lap?
-        if lap["currentLapNum"] > prev_lap_num and lap["lastLapTime"] > 0:
-            if self._partial_lap:
-                self._start_first_full_lap()
+        crossed = lap["currentLapNum"] > prev_lap_num
+        if crossed:
+            if lap["lastLapTime"] > 0:
+                if self._partial_lap:
+                    self._start_first_full_lap()
+                else:
+                    self._record_completed_lap(prev_lap_num, lap["lastLapTime"], lap)
             else:
-                self._record_completed_lap(prev_lap_num, lap["lastLapTime"], lap)
+                # Out-laps and abandoned laps are not timed by the game. Drop
+                # their evidence so it cannot leak into the next push lap.
+                self._discard_lap_evidence()
         self.lap_data.update(lap)
+        if crossed:
+            # The new lap starts now; remember how it started for the next line.
+            self._lap_start_pit = bool(lap["pitStatus"])
+            self._lap_start_status = lap["driverStatus"]
+            self._lap_had_pit = bool(lap["pitStatus"])
+            self._lap_had_out = lap["driverStatus"] == 3
+            self._lap_had_in = lap["driverStatus"] == 2
+        elif lap["pitStatus"]:
+            self._lap_had_pit = True
+        if not crossed:
+            self._lap_had_out = self._lap_had_out or lap["driverStatus"] == 3
+            self._lap_had_in = self._lap_had_in or lap["driverStatus"] == 2
 
     def _start_first_full_lap(self) -> None:
         """Crossing the line after joining mid-lap: drop what was counted on the partial lap and start the
         per-lap measurements (fuel, wear, temperatures, detectors) from here."""
         self._partial_lap = False
+        self._reset_lap_accumulators()
+
+    def _reset_lap_accumulators(self) -> None:
         self.lap_start_fuel = self.status.get("fuelInTank", 0.0)
         self.lap_start_wear = dict(self.damage.get("tyresWear", {"fl": 0, "fr": 0, "rl": 0, "rr": 0}))
         self._temp_sum = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
         self._temp_n = 0
+        self._temp_sum_push = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+        self._temp_n_push = 0
+        self._temp_max = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+        self._temp_window.clear()
         self.current_lap_max_speed = 0
         self.oversteer_events = self.understeer_events = 0
+        self.front_locking_events = self.rear_locking_events = 0
         self.kerb_last_lap = self.kerb_bottoming_events = 0
+        self._reset_episodes()
+
+    def _discard_lap_evidence(self) -> None:
+        self._finish_lap_episodes(self.last_st)
+        self.episode_last_lap = {}
+        self._reset_lap_accumulators()
 
     def on_status(self, cs: dict) -> None:
+        compound = TYRE_COMPOUNDS.get(cs["visualTyreCompound"], "Dry")
+        age = int(cs["tyresAgeLaps"] or 0)
+        if self._tyre_compound_last is not None and (
+            compound != self._tyre_compound_last or (self._tyre_age_last is not None and age < self._tyre_age_last)
+        ):
+            # New tyres: lockup/wear/temperature evidence on the old set is not
+            # evidence about this one. Start a new tyre generation.
+            self.tyre_generation += 1
+            self._reset_episodes()
+            self._temp_sum = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+            self._temp_n = 0
+            self._temp_sum_push = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+            self._temp_n_push = 0
+            self._temp_max = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+            self._temp_window.clear()
+        self._tyre_compound_last = compound
+        self._tyre_age_last = age
         self.status.update(
             {
                 "fuelMix": cs["fuelMix"],
                 "fuelInTank": round(cs["fuelInTank"], 2),
                 "fuelRemainingLaps": round(cs["fuelRemainingLaps"], 2),
                 "drsAllowed": bool(cs["drsAllowed"]),
-                "tyreCompound": TYRE_COMPOUNDS.get(cs["visualTyreCompound"], "Dry"),
+                "tyreCompound": compound,
                 "tyresAgeLaps": cs["tyresAgeLaps"],
                 "ersStoreEnergy": round(cs["ersStoreEnergy"], 0),
                 "ersDeployMode": cs["ersDeployMode"],
@@ -423,27 +547,140 @@ class EngineerFeed:
             "ballast": su["ballast"],
             "fuelLoad": round(su["fuelLoad"], 1),
         }
-        if old:
-            old_handling = _handling(old)
-            new_handling = _handling(self.setup)
-            if old_handling == new_handling:
-                return
-            changed_fields = {
-                k
-                for k, v in new_handling.items()
-                if old_handling.get(k) != v
-            }
-            self._restart_evidence(changed_fields)
+        changed = EV.setup_diff(old, self.setup) if old else {}
+        if changed:
+            self.setup_generation += 1
+            self.setup_history.append({
+                "lap": self._lap_num(),
+                "st": self.last_st,
+                "changed": changed,
+                "setup": dict(self.setup),
+            })
+            self.setup_history = self.setup_history[-20:]
+            self._restart_evidence(set(changed))
 
     def _restart_evidence(self, changed_fields: set[str]) -> None:
         """Mark a setup change so immediate follow-up analysis can keep unrelated advice while
         suppressing parameters that were just adjusted."""
         self.setup_changed_lap = self.lap_data.get("currentLapNum")
-        self.setup_changed_fields = set(changed_fields)
+        self.setup_changed_fields = set(changed_fields or ())
+        self._reset_episodes()
 
+    # ---------------------------------------------------------------- episodes
+    def _lap_num(self) -> int:
+        return int(self.lap_data.get("currentLapNum", 0) or 0)
+
+    def _episode_context(self) -> dict:
+        tel = self.telemetry or {}
+        ld = self.lap_data or {}
+        return {
+            "lap": self._lap_num(),
+            "lap_distance": float(ld.get("lapDistance", -1.0) or -1.0),
+            "speed": float(tel.get("speed", 0.0) or 0.0),
+            "g": abs(float((self.motion or {}).get("gForceLateral", 0.0) or 0.0)),
+            "in_pit": bool(ld.get("pitStatus", 0)),
+            "in_garage": int(ld.get("driverStatus", 4) or 0) == 0,
+            "on_track": EV.is_on_track(tel.get("surfaceType")),
+        }
+
+    def _on_track_sample(self, min_kmh: float = 30.0) -> bool:
+        tel = self.telemetry or {}
+        ld = self.lap_data or {}
+        in_pit = bool(ld.get("pitStatus", 0)) or int(ld.get("driverStatus", 4) or 0) == 0
+        return (float(tel.get("speed", 0.0) or 0.0) > min_kmh and not in_pit
+                and EV.is_on_track(tel.get("surfaceType")))
+
+    def _rear_lock_condition(self) -> bool:
+        """Rear wheel speed well below the fronts while braking hard.
+
+        F1 2020 only sends per-wheel speed for the player's own car, which is
+        exactly the feed the engineer uses. Units are m/s.
+        """
+        tel = self.telemetry or {}
+        ld = self.lap_data or {}
+        brake = float(tel.get("brake", 0.0) or 0.0)
+        speed = float(tel.get("speed", 0.0) or 0.0)
+        if brake < float(self.th["rear_lock_brake"]) or speed < float(self.th["lock_min_kmh"]):
+            return False
+        if bool(ld.get("pitStatus", 0)) or int(ld.get("driverStatus", 4) or 0) == 0:
+            return False
+        ws = (self.motion or {}).get("wheelSpeed") or []
+        if len(ws) < 4:
+            return False
+        rear = max(float(ws[0]), float(ws[1]))
+        front = max(float(ws[2]), float(ws[3]))
+        ground = speed / 3.6
+        if front <= 5.0 or ground <= 5.0:
+            return False
+        return rear < front * float(self.th["rear_lock_ratio"]) and rear < ground * 0.92
+
+    def _step_rear_lock(self, legacy: bool = False) -> None:
+        condition = self._rear_lock_condition()
+        if legacy and condition:
+            self.rear_locking_events += 1
+        self._step_episode("rear_lock", condition, wheels={0, 1})
+
+    def _rolling_temps(self) -> dict | None:
+        if not self._temp_window:
+            return None
+        keys = ("fl", "fr", "rl", "rr")
+        sums = {k: 0.0 for k in keys}
+        for _, temps in self._temp_window:
+            for k in keys:
+                sums[k] += float(temps.get(k, 0.0) or 0.0)
+        n = len(self._temp_window)
+        return {k: round(sums[k] / n, 1) for k in keys}
+
+    def _step_episode(self, kind: str, condition: bool, **sample) -> None:
+        """Feed one sample to an episode detector and keep the closed episode."""
+        ctx = self._episode_context()
+        ctx.update(sample)
+        ep = self.episode_trackers[kind].update(self.last_st, bool(condition), ctx)
+        if ep is not None:
+            self.episode_current[kind].append(ep.as_dict())
+
+    def _flush_episodes(self, now: float) -> dict[str, list[dict]]:
+        for kind, tracker in self.episode_trackers.items():
+            ep = tracker.flush(now)
+            if ep is not None:
+                self.episode_current[kind].append(ep.as_dict())
+        return {k: list(v) for k, v in self.episode_current.items()}
+
+    def _finish_lap_episodes(self, now: float) -> dict[str, dict]:
+        """Close every open episode at the line and return the lap's summary."""
+        current = self._flush_episodes(now)
+        summary = EV.summarize_episodes([ep for rows in current.values() for ep in rows])
+        self.episode_last_lap = summary
+        self.episode_current = {k: [] for k in EV.EPISODE_KINDS}
+        for tracker in self.episode_trackers.values():
+            tracker.reset()
+        return summary
+
+    def _reset_episodes(self) -> None:
+        self.episode_current = {k: [] for k in EV.EPISODE_KINDS}
+        self.episode_last_lap = {}
+        for tracker in self.episode_trackers.values():
+            tracker.reset()
     def _record_completed_lap(
         self, lap_num: int, lap_time: float, current_lap_packet: dict
     ) -> None:
+        # Close episode evidence at the line before the counters are reset.
+        lap_episodes = self._finish_lap_episodes(self.last_st)
+        invalid = bool(self.lap_data.get("isCurrentLapInvalid", False))
+        quality = EV.classify_lap(
+            self._lap_start_pit,
+            bool(self.lap_data.get("pitStatus", 0)),
+            self._lap_start_status,
+            self.lap_data.get("driverStatus"),
+            invalid,
+            self._lap_had_pit,
+            self._lap_had_out,
+            self._lap_had_in,
+        )
+        best_clean = min((l["lapTime"] for l in self.completed_laps if l.get("clean")), default=None)
+        clean = bool(quality["push"] and (best_clean is None or lap_time < best_clean * 1.07))
+        quality["clean"] = clean
+        self.last_lap_quality = {"lapNumber": lap_num, "lapTime": lap_time, **quality}
         # Fuel used
         curr_fuel = self.status.get("fuelInTank", 0.0)
         fuel_used = (
@@ -459,13 +696,23 @@ class EngineerFeed:
             for k in ["fl", "fr", "rl", "rr"]
         }
         self.lap_start_wear = dict(curr_wear)
-        # Average inner tyre temps
+        # Average inner tyre temps. On-track push-lap samples win; the old
+        # all-sample sum is kept only as a fallback for a lap with no usable
+        # on-track data.
         avg_temps = {"fl": 100, "fr": 100, "rl": 100, "rr": 100}
-        if self._temp_n:
+        if self._temp_n_push:
+            for k in avg_temps:
+                avg_temps[k] = round(self._temp_sum_push[k] / self._temp_n_push, 1)
+        elif self._temp_n:
             for k in avg_temps:
                 avg_temps[k] = round(self._temp_sum[k] / self._temp_n, 1)
+        max_temps = dict(self._temp_max) if self._temp_n_push else {}
+        temp_samples = self._temp_n_push
         self._temp_sum = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
         self._temp_n = 0
+        self._temp_sum_push = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
+        self._temp_n_push = 0
+        self._temp_max = {"fl": 0, "fr": 0, "rl": 0, "rr": 0}
         # Sector times (as the relay read them: from the first packet of the new lap)
         s1 = current_lap_packet.get("sector1TimeMs", 0) / 1000.0
         s2 = current_lap_packet.get("sector2TimeMs", 0) / 1000.0
@@ -487,13 +734,24 @@ class EngineerFeed:
                 "tyreWear": dict(curr_wear),
                 "tyreWearDelta": wear_delta,
                 "averageTyreTemps": avg_temps,
+                "maxTyreTemps": max_temps,
+                "tempSamples": temp_samples,
                 "tyreCompound": self.status.get("tyreCompound", "Soft"),
-                "isValid": not self.lap_data.get(
-                    "isCurrentLapInvalid", False
-                ),  # the lap just completed
+                "isValid": quality["valid"],  # the lap just completed
+                "valid": quality["valid"],
+                "kind": quality["kind"],
+                "pit": quality["pit"],
+                "push": quality["push"],
+                "clean": quality["clean"],
+                "label": quality["label"],
                 "oversteerEvents": self.oversteer_events,
                 "understeerEvents": self.understeer_events,
+                "frontLockingEvents": self.front_locking_events,
+                "rearLockingEvents": self.rear_locking_events,
                 "kerbEvents": self.kerb_bottoming_events,
+                "episodes": lap_episodes,
+                "tyreGeneration": self.tyre_generation,
+                "setup_generation": self.setup_generation,
             }
         )
         self.current_lap_max_speed = 0
@@ -518,6 +776,10 @@ class EngineerFeed:
             "participants": [],
             "setupChangedLap": self.setup_changed_lap,
             "setupChangedFields": sorted(self.setup_changed_fields),
+            "tyreGeneration": self.tyre_generation,
+            "setupGeneration": self.setup_generation,
+            "setupHistory": self.setup_history[-10:],
+            "lastLap": self.last_lap_quality,
             "diagnostics": {
                 "oversteerEvents": self.oversteer_events,
                 "understeerEvents": self.understeer_events,
@@ -527,6 +789,17 @@ class EngineerFeed:
                 "kerbBottomingEvents": max(
                     self.kerb_bottoming_events, self.kerb_last_lap
                 ),
+                "episodes": EV.summarize_episodes(
+                    [ep for rows in self.episode_current.values() for ep in rows]
+                    + [t.active.as_dict() for t in self.episode_trackers.values() if t.active]
+                ),
+                "episodeLastLap": self.episode_last_lap,
+                "tyreTemps": {
+                    "current": dict(self.telemetry.get("tyresInnerTemperature") or {}),
+                    "rolling": self._rolling_temps(),
+                    "lapAverage": EV.temperature_summary(self.completed_laps, window=3),
+                },
+                "wear": EV.wear_estimate(self.completed_laps),
             },
             "timestamp": self.last_st,
         }
@@ -753,6 +1026,181 @@ def _driving_style_recommendations(
 
 # ------------------------------------------------------------------------------------ setup engine
 def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
+    """Frozen v1 engine (byte-compatible with the original TypeScript app)."""
+    return _analyze_impl(snapshot, active_feedback, enhanced=False)
+
+
+def analyze_v2(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
+    """Evidence-based engine used by the Engineer page.
+
+    Builds a filtered v1-shaped snapshot from episode/lap evidence, then runs the
+    same rule set so the output stays compatible with the existing UI. v1 remains
+    available for the golden tests and for ``[engineer] engine = "v1"``.
+    """
+    fb = list(active_feedback or [])
+    laps_all = list(snapshot.get("completedLaps") or [])
+    generation = snapshot.get("setupGeneration")
+    changed = snapshot.get("setupChangedLap")
+    changed_fields = set(snapshot.get("setupChangedFields") or [])
+    post_change_push = [
+        l for l in laps_all
+        if EV.lap_is_push(l) and changed is not None and l.get("lapNumber", 0) >= changed
+        and (generation is None or l.get("setup_generation") is None
+             or int(l["setup_generation"]) == int(generation))
+    ]
+    # A setup change is pending until a push lap on the new setup is logged.
+    # Until then, keep the last advice visible (the changed parameters are
+    # suppressed by the analyzer) instead of blanking the page.
+    using_prechange = bool(changed_fields and changed is not None and not post_change_push)
+    filter_generation = None if using_prechange else generation
+    window = EV.episode_window(laps_all, window=3, generation=filter_generation)
+    push_laps = [l for l in laps_all
+                 if EV.lap_is_push(l)
+                 and (filter_generation is None or l.get("setup_generation") is None
+                      or int(l["setup_generation"]) == int(filter_generation))]
+    wear = EV.wear_estimate(laps_all, generation=filter_generation)
+    temps = EV.temperature_summary(laps_all, window=3, generation=filter_generation)
+    diag = dict(snapshot.get("diagnostics") or {})
+    diag.update({
+        "oversteerEvents": window["oversteer"]["count"],
+        "understeerEvents": window["understeer"]["count"],
+        "frontLockingEvents": window["front_lock"]["count"],
+        "rearLockingEvents": window["rear_lock"]["count"],
+        "kerbBottomingEvents": window["kerb"]["count"],
+        "spinEvents": diag.get("soloSpinEvents", diag.get("spinEvents", 0)),
+        "episodeWindow": window,
+    })
+    snap = dict(snapshot)
+    snap["diagnostics"] = diag
+    snap["completedLaps"] = push_laps
+    tel = dict(snap.get("telemetry") or {})
+    if temps and temps.get("avg"):
+        tel["tyresInnerTemperature"] = dict(temps["avg"])
+    snap["telemetry"] = tel
+
+    config = snapshot.get("engineerConfig") or {}
+    kind = _session_kind(snapshot)
+    remaining = _laps_remaining(snapshot) if kind == "race" else 0
+    peak_wear = max((snapshot.get("damage", {}).get("tyresWear") or {0: 0}).values(), default=0)
+    rate = max(wear.get("front_rate") or 0.0, wear.get("rear_rate") or 0.0)
+    projected = peak_wear + rate * max(0, remaining)
+    high_wear_trigger = bool(
+        wear.get("laps", 0) >= 2 and
+        (rate >= float(config.get("high_wear_rate_pct_per_lap", 1.2))
+         or (kind == "race" and projected >= float(config.get("high_wear_projected_pct", 80))))
+    )
+    high_speed = [ep for ep in window["oversteer"]["episodes"]
+                  if float(ep.get("max_speed_kmh") or 0) >= float(config.get("high_speed_kmh", 180))]
+    high_speed_trigger = bool(len(high_speed) >= 2)
+    top_speed_trigger, top_speed_note = _top_speed_deficit(push_laps, config)
+    evidence = {
+        "laps": {"push": len(push_laps), "all": len(laps_all)},
+        "using_prechange_evidence": using_prechange,
+        "episodes": window,
+        "wear": wear,
+        "temperatures": temps,
+        "high_speed_episodes": len(high_speed),
+        "high_wear_trigger": high_wear_trigger,
+        "high_speed_trigger": high_speed_trigger,
+        "top_speed_trigger": top_speed_trigger,
+        "top_speed_note": top_speed_note,
+        "laps_remaining": remaining,
+    }
+    evidence["causes"] = _attribution(snapshot, evidence)
+    snap["_evidence"] = evidence
+    result = _analyze_impl(snap, fb, enhanced=True)
+    result["engine"] = "v2"
+    result["evidence"] = evidence
+    result["causes"] = evidence.get("causes", [])
+    result["provisional"] = len(push_laps) < int(config.get("min_clean_laps", 2))
+    result["confidence"] = round(min(
+        wear.get("confidence") or 0.0,
+        0.4 + 0.15 * len(push_laps),
+    ) * (0.7 if result["causes"] else 1.0), 2)
+    return result
+
+
+def _attribution(snapshot: dict, evidence: dict) -> list[dict]:
+    """Explain balance problems that are not setup problems.
+
+    A damaged front wing, worn rear tyres or a contact-induced spin can look
+    exactly like understeer/oversteer. Name the likely cause before (or
+    alongside) prescribing clicks.
+    """
+    damage = snapshot.get("damage") or {}
+    status = snapshot.get("status") or {}
+    episodes = (evidence.get("episodes") or {})
+    under = (episodes.get("understeer") or {}).get("count", 0)
+    over = (episodes.get("oversteer") or {}).get("count", 0)
+    high_speed = (episodes.get("oversteer") or {}).get("episodes", [])
+    high_speed = sum(1 for ep in high_speed if float(ep.get("max_speed_kmh") or 0) >= 180)
+    front_wing = max(float(damage.get("frontLeftWingDamage") or 0),
+                     float(damage.get("frontRightWingDamage") or 0))
+    rear_wing = float(damage.get("rearWingDamage") or 0)
+    wear = damage.get("tyresWear") or {}
+    front_wear = max(float(wear.get("fl") or 0), float(wear.get("fr") or 0))
+    rear_wear = max(float(wear.get("rl") or 0), float(wear.get("rr") or 0))
+    age = int(status.get("tyresAgeLaps") or 0)
+    causes = []
+    if front_wing >= 10 and under:
+        causes.append({
+            "issue": "understeer", "cause": "damage", "severity": "warning",
+            "title": "Understeer likely from front-wing damage",
+            "description": f"Front-wing damage is {front_wing:.0f}%. Repair it before tuning the setup; "
+                           "adding front wing to compensate will not restore the lost balance.",
+        })
+    if rear_wing >= 10 and (over or high_speed):
+        causes.append({
+            "issue": "oversteer", "cause": "damage", "severity": "warning",
+            "title": "Oversteer likely from rear-wing damage",
+            "description": f"Rear-wing damage is {rear_wing:.0f}%. Repair it before changing rear-wing or toe settings.",
+        })
+    if (rear_wear >= 60 or age >= 12) and over:
+        causes.append({
+            "issue": "oversteer", "cause": "tyre", "severity": "warning",
+            "title": "Oversteer likely from worn rear tyres",
+            "description": f"Rear wear is {rear_wear:.0f}% at {age} laps. Manage or replace the tyres before "
+                           "opening the differential to mask the wear.",
+        })
+    if front_wear >= 60 and under:
+        causes.append({
+            "issue": "understeer", "cause": "tyre", "severity": "warning",
+            "title": "Understeer likely from worn front tyres",
+            "description": f"Front wear is {front_wear:.0f}%. Tyre management or a stop is the first fix, not more front wing.",
+        })
+    return causes
+
+
+def _laps_remaining(snapshot: dict) -> int:
+    try:
+        current = max(1, int((snapshot.get("lapData") or {}).get("currentLapNum", 1) or 1))
+        total = int((snapshot.get("session") or {}).get("totalLaps", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, total - current)
+
+
+def _top_speed_deficit(laps: list[dict], config: dict) -> tuple[bool, str | None]:
+    """Very conservative straight-line deficit check.
+
+    A lower recent max speed can just be fuel, tow, DRS or traffic, so this is
+    only a low-priority hint and is never treated as hard setup evidence.
+    """
+    values = [float(l.get("maxSpeedKmh") or 0) for l in laps if l.get("maxSpeedKmh")]
+    need = int(config.get("top_speed_min_laps", 3))
+    if len(values) < need:
+        return False, None
+    baseline = max(values[:-1])
+    recent = max(values[-(max(1, need - 1)):])
+    deficit = baseline - recent
+    threshold = float(config.get("top_speed_deficit_kmh", 8))
+    if deficit >= threshold:
+        return True, f"recent max speed {recent:.0f} km/h vs session best {baseline:.0f} km/h"
+    return False, None
+
+
+def _analyze_impl(snapshot: dict, active_feedback: list[str] | None = None,
+                  enhanced: bool = False) -> dict:
     """analyzeTelemetryAndGenerateSetup(snapshot, activeFeedback) from engineer_engine.ts."""
     fb = list(active_feedback or [])
     current_setup = dict(snapshot["setup"])
@@ -805,7 +1253,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     front_lock_count = diag.get("frontLockingEvents") or 0
     kerb_hits = diag.get("kerbBottomingEvents") or 0
     spin_events = diag.get("spinEvents") or 0
-    oversteer_count += spin_events * 3
+    oversteer_count += spin_events * (1 if enhanced else 3)
     # Behavioural evidence is useful even when the lap was invalid.
     # Invalid laps must not affect lap-time/pace analysis, but events such
     # as oversteer, understeer still describe the car's
@@ -820,9 +1268,12 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
         laps = completed_laps
     else:
         laps = []
-    for lap in laps[-3:]:
-        oversteer_count += lap.get("oversteerEvents", 0) or 0
-        understeer_count += lap.get("understeerEvents", 0) or 0
+    if not enhanced:
+        for lap in laps[-3:]:
+            oversteer_count += lap.get("oversteerEvents", 0) or 0
+            understeer_count += lap.get("understeerEvents", 0) or 0
+    rear_lock_count = diag.get("rearLockingEvents") or 0
+    evidence = snapshot.get("_evidence") or {}
 
     balance = 0  # negative = oversteer, positive = understeer
     corner_profile = snapshot.get("cornerProfile") or snapshot.get("corner_profile") or []
@@ -949,7 +1400,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
             )
 
     # DIAGNOSTIC 3: High-speed instability
-    if "high_speed_snap" in fb:
+    if "high_speed_snap" in fb or (enhanced and evidence.get("high_speed_trigger")):
         issues.append(
             {
                 "title": "Aerodynamic & High-Speed Instability",
@@ -1049,7 +1500,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
                 "High",
             )
 
-    if "rear_locking" in fb:
+    if "rear_locking" in fb or (enhanced and rear_lock_count > 1):
         issues.append(
             {
                 "title": "Rear Axle Snapping Under Braking",
@@ -1130,7 +1581,13 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
         rear_current_wear,
     )
 
-    if "high_tyre_wear" in fb:
+    wear_ev = evidence.get("wear") if enhanced else None
+    if wear_ev and wear_ev.get("laps"):
+        recent_wear_laps = wear_ev.get("samples") or []
+        front_wear_rate = wear_ev.get("front_rate") or 0.0
+        rear_wear_rate = wear_ev.get("rear_rate") or 0.0
+
+    if "high_tyre_wear" in fb or (enhanced and evidence.get("high_wear_trigger")):
         if recent_wear_laps:
             wear_description = (
                 f"Recent tyre wear is approximately "
@@ -1364,7 +1821,7 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
             )
 
     # DIAGNOSTIC 8: Straight-line speed deficit
-    if "lacking_top_speed" in fb:
+    if "lacking_top_speed" in fb or (enhanced and evidence.get("top_speed_trigger")):
         issues.append(
             {
                 "title": "Excessive Aerodynamic Drag",
@@ -1424,6 +1881,18 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     else:
         result_style = None
 
+    if enhanced and evidence.get("causes"):
+        existing_titles = {i["title"] for i in issues}
+        for cause in evidence["causes"]:
+            if cause["title"] not in existing_titles:
+                issues.insert(0, {
+                    "title": cause["title"],
+                    "description": cause["description"],
+                    "severity": cause.get("severity", "warning"),
+                    "cause": cause.get("cause"),
+                })
+                existing_titles.add(cause["title"])
+
     label = "Balanced / Neutral"
     if balance <= -5:
         label = "Heavy Oversteer"
@@ -1434,8 +1903,13 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     elif balance >= 2:
         label = "Mild Understeer"
 
+    brief_wear = None
+    if enhanced and evidence.get("wear"):
+        brief_wear = max(evidence["wear"].get("front_rate") or 0.0,
+                         evidence["wear"].get("rear_rate") or 0.0) or None
     briefing = session_briefing(
-        snapshot, label, recommendations[0] if recommendations else None
+        snapshot, label, recommendations[0] if recommendations else None,
+        wear_per_lap=brief_wear,
     )
     result = {
         "radioMessage": briefing["radioMessage"],
@@ -1525,7 +1999,8 @@ def _race_fuel_call(fuel_delta: float, laps_remaining: int) -> str:
 
 
 def session_briefing(
-    snapshot: dict, balance_label: str, top: dict | None = None
+    snapshot: dict, balance_label: str, top: dict | None = None,
+    wear_per_lap: float | None = None,
 ) -> dict:
     """buildSessionBriefing(snapshot, balanceLabel, topSetupRecommendation) from strategy.ts."""
     kind = _session_kind(snapshot)
@@ -1588,7 +2063,7 @@ def session_briefing(
         total_laps = max(current_lap, snapshot["session"]["totalLaps"])
         laps_remaining = max(0, total_laps - current_lap)
         wear = _max_tyre_wear(snapshot)
-        wear_per_lap = _recent_wear_per_lap(snapshot)
+        wear_per_lap = wear_per_lap if wear_per_lap is not None else _recent_wear_per_lap(snapshot)
         peak_temp = max(snapshot["telemetry"]["tyresInnerTemperature"].values())
         dmg = snapshot["damage"]
         wing_damage = max(
@@ -1683,10 +2158,12 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
             "color": L.TEAM_COLORS.get(c.team, "#888"),
             "own": c.own,
             "setup": bool(feed and feed.setup),
+            "engine": str((s.engineer_th or {}).get("engine", "v2")),
         }
         roster.append(row)
         snap = feed.snapshot(name, sess) if feed else None
         if snap is not None:
+            snap["engineerConfig"] = dict(s.engineer_th or {})
             snap["cornerProfile"] = s.corner_profile(c)
             snap["drivingStyle"] = s.style_metrics(c)
             # Keep the in-progress 5 m trace separate from completed-lap analysis so the
@@ -1710,6 +2187,10 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
                 "traceWindow": 8,
             }
             snap["diagnostics"]["spinEvents"] = c.counts.get("spins", 0)
+            snap["diagnostics"]["contactSpins"] = c.counts.get("contact_spins", 0)
+            snap["diagnostics"]["soloSpinEvents"] = max(
+                0, c.counts.get("spins", 0) - c.counts.get("contact_spins", 0)
+            )
         by_name[name.lower()] = dict(row, snapshot=snap)
     return roster, by_name
 
@@ -1732,10 +2213,11 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
     if snap is None:
         return out
     laps = snap["completedLaps"]
+    last_lap = laps[-1] if laps else None
     out["car"] = {
         "session": snap["session"],
         "telemetry": snap["telemetry"],
-        "motion": {"gForceLateral": snap["motion"]["gForceLateral"]},
+        "motion": {"gForceLateral": (snap.get("motion") or {}).get("gForceLateral", 0.0)},
         "status": snap["status"],
         "damage": snap["damage"],
         "lapData": snap["lapData"],
@@ -1747,13 +2229,25 @@ def payload(entry: dict | None, name: str, feedback: list[str]) -> dict:
             (l["lapTime"] for l in laps if l["isValid"] and l["lapTime"] > 0), default=0
         ),
         "recentLaps": laps[-5:],
+        "lastLap": ({
+            "number": last_lap.get("lapNumber"),
+            "label": last_lap.get("label") or {
+                "out": "Out lap", "in": "In lap", "flying": "Flying lap",
+            }.get(last_lap.get("kind"), "Lap"),
+            "kind": last_lap.get("kind"),
+            "valid": last_lap.get("valid", last_lap.get("isValid", True)),
+            "push": last_lap.get("push"),
+            "time": last_lap.get("lapTime"),
+        } if last_lap else None),
         "setupChangedLap": snap.get("setupChangedLap"),
         "liveTrace": snap.get("liveTrace", []),
         "liveLap": snap.get("liveLap", {}),
     }
     if snap["setup"]:
+        engine = str(entry.get("engine", "v2"))
+        out["engine"] = engine
         try:
-            out["analysis"] = analyze(snap, fb)
+            out["analysis"] = analyze_v2(snap, fb) if engine == "v2" else analyze(snap, fb)
         except Exception as e:  # never break a driver's live stream over one bad sample
             out["error"] = f"analysis failed: {e!r}"
     return out

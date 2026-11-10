@@ -1140,10 +1140,14 @@ class Session:
             c._last_spin_end = st
             where = self.corner(s["d"])
             if s["max"] >= self.det["spin_deg"]:
+                recent_contact = [o for o, t in c.recent_contact.items() if st - t < 2.5]
+                if recent_contact:
+                    c.counts["contact_spins"] += 1
                 c.counts["spins"] += 1
                 self.emit("spin", "major", [c.idx], f"Spun at {where} ({s['max']:.0f}° at {s['v']:.0f} km/h)",
                           st=s["st"], wall=s["wall"], capture=True, lap_distance=s["d"],
-                          data={"max_deg": round(s["max"]), "speed": round(s["v"])})
+                          data={"max_deg": round(s["max"]), "speed": round(s["v"]),
+                                "contact": bool(recent_contact)})
             else:
                 c.counts["slides"] += 1
                 self.emit("slide", "minor", [c.idx], f"Big slide at {where} ({s['max']:.0f}°)",
