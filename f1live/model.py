@@ -1143,6 +1143,9 @@ class Session:
                 recent_contact = [o for o, t in c.recent_contact.items() if st - t < 2.5]
                 if recent_contact:
                     c.counts["contact_spins"] += 1
+                    eng = self.engineers.get(c.idx)
+                    if eng is not None:
+                        eng.mark_contact_spin(s["st"], st)
                 c.counts["spins"] += 1
                 self.emit("spin", "major", [c.idx], f"Spun at {where} ({s['max']:.0f}° at {s['v']:.0f} km/h)",
                           st=s["st"], wall=s["wall"], capture=True, lap_distance=s["d"],

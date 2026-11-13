@@ -62,6 +62,13 @@ DEFAULTS: dict[str, float] = {
     "lock_min_kmh": 40.0,
     "rear_lock_brake": 0.4,
     "rear_lock_ratio": 0.80,
+    "kerb_corner_lat_g": 0.8,
+    "kerb_corner_steer": 0.10,
+    "kerb_spin_window_s": 2.5,
+    "kerb_spin_slide_deg": 30.0,
+    "kerb_spin_deg": 90.0,
+    "kerb_spin_min_kmh": 50.0,
+    "kerb_stiff_suspension": 3,
 }
 
 FEED_PACKETS = {P.MOTION, P.LAP, P.TELEMETRY, P.STATUS, P.SETUPS}
@@ -279,6 +286,8 @@ class EngineerFeed:
         self.setup_changed_fields: set[str] = set()
         self._lap_seen = False  # had a lap packet from this game yet
         self._partial_lap = False  # joined mid-lap: the lap in progress isn't logged
+        self._last_corner_kerb: dict | None = None
+        self._spin_slide: dict | None = None
 
     def feed(self, pkt: dict, idx: int) -> None:
         """One decoded packet from this driver's own game; idx is their car (the header's playerCarIndex)."""
@@ -336,17 +345,29 @@ class EngineerFeed:
         # These are gated on actually driving; the legacy counters above are left
         # as they were for the frozen v1 analysis.
         speed = float(self.telemetry.get("speed", 0.0) or 0.0)
+        steer = abs(float(self.telemetry.get("steer", 0.0) or 0.0))
+        lat_g = abs(m["gForceLateral"])
         in_pit = bool(self.lap_data.get("pitStatus", 0)) or int(self.lap_data.get("driverStatus", 4) or 0) == 0
-        on_track = EV.is_on_track(self.telemetry.get("surfaceType"))
+        surfaces = list(self.telemetry.get("surfaceType") or [])
+        on_track = EV.is_on_track(surfaces)
         over_gate = oversteer and speed > float(self.th["oversteer_min_kmh"]) and not in_pit and on_track
         under_gate = (understeer and speed > float(self.th["understeer_min_kmh"])
-                      and not in_pit and on_track and abs(float(self.telemetry.get("steer", 0.0) or 0.0)) > 0.05)
+                      and not in_pit and on_track and steer > 0.05)
         kerb_gate = speed > float(self.th["kerb_min_kmh"]) and not in_pit and on_track
         self._step_episode("oversteer", over_gate, slip=max(slips[:2] or [0]),
-                           g=abs(m["gForceLateral"]))
+                           g=lat_g)
         self._step_episode("understeer", under_gate, slip=max(slips[2:4] or [0]),
-                           g=abs(m["gForceLateral"]))
+                           g=lat_g)
         self._step_episode("kerb", bool(kerb_hits) and kerb_gate, wheels=kerb_hits)
+        self._record_corner_kerb(kerb_hits, surfaces, kerb_gate, lat_g, steer, speed)
+        vx = float(cm.get("worldVelocityX", 0.0) or 0.0)
+        vz = float(cm.get("worldVelocityZ", 0.0) or 0.0)
+        v_kmh = math.hypot(vx, vz) * 3.6
+        yaw_slip = 0.0
+        if v_kmh > 5.0:
+            ang = math.atan2(vx, vz) - float(cm.get("yaw", 0.0) or 0.0)
+            yaw_slip = abs(math.degrees(math.atan2(math.sin(ang), math.cos(ang))))
+        self._step_kerb_spin(v_kmh, yaw_slip, in_pit)
         self._step_rear_lock(legacy=True)
 
     def on_telemetry(self, td: dict) -> None:
@@ -656,9 +677,127 @@ class EngineerFeed:
             tracker.reset()
         return summary
 
+    def _record_corner_kerb(
+        self,
+        kerb_hits: list[int],
+        surfaces: list[int],
+        kerb_gate: bool,
+        lat_g: float,
+        steer: float,
+        speed: float,
+    ) -> None:
+        if not kerb_gate:
+            return
+        in_corner = (
+            lat_g >= float(self.th["kerb_corner_lat_g"])
+            or steer >= float(self.th["kerb_corner_steer"])
+        )
+        if not in_corner:
+            return
+        surface_kerb_wheels = [i for i, s in enumerate(surfaces) if int(s) in (1, 11)]
+        wheels = sorted(set(kerb_hits) | set(surface_kerb_wheels))
+        if not wheels:
+            return
+        self._last_corner_kerb = {
+            "st": self.last_st,
+            "lap": self._lap_num(),
+            "lap_distance": float(self.lap_data.get("lapDistance", -1.0) or -1.0),
+            "wheels": wheels,
+            "surfaces": sorted({int(surfaces[i]) for i in wheels if i < len(surfaces)}),
+            "max_g": lat_g,
+            "speed": speed,
+        }
+
+    def _step_kerb_spin(self, v_kmh: float, yaw_slip: float, in_pit: bool) -> None:
+        """Link a corner kerb strike to an immediately following spin (>= spin_deg)."""
+        window_s = float(self.th["kerb_spin_window_s"])
+        slide_deg = float(self.th["kerb_spin_slide_deg"])
+        spin_deg = float(self.th["kerb_spin_deg"])
+        min_kmh = float(self.th["kerb_spin_min_kmh"])
+
+        if not in_pit and v_kmh > min_kmh and yaw_slip > slide_deg:
+            kerb = self._last_corner_kerb
+            if self._spin_slide is None:
+                matched = kerb if (kerb is not None and 0.0 <= (self.last_st - kerb["st"]) <= window_s) else None
+                self._spin_slide = {
+                    "st": self.last_st,
+                    "max_deg": yaw_slip,
+                    "max_speed": v_kmh,
+                    "min_speed": v_kmh,
+                    "kerb": matched,
+                    "recorded": False,
+                }
+            else:
+                self._spin_slide["max_deg"] = max(self._spin_slide["max_deg"], yaw_slip)
+                self._spin_slide["max_speed"] = max(self._spin_slide["max_speed"], v_kmh)
+                self._spin_slide["min_speed"] = min(self._spin_slide["min_speed"], v_kmh)
+                if (
+                    self._spin_slide["kerb"] is None
+                    and self._spin_slide["max_deg"] < 50.0
+                    and kerb is not None
+                    and (self.last_st - self._spin_slide["st"]) <= 0.25
+                    and 0.0 <= (self.last_st - kerb["st"]) <= window_s
+                ):
+                    self._spin_slide["kerb"] = kerb
+
+            k = self._spin_slide.get("kerb")
+            if k is not None and self._spin_slide["max_deg"] >= spin_deg:
+                rows = self.episode_current.setdefault("kerb_spin", [])
+                start_st = round(float(k["st"]), 3)
+                end_dist = float(self.lap_data.get("lapDistance", -1.0) or -1.0)
+                if not self._spin_slide["recorded"]:
+                    ep = EV.Episode(
+                        kind="kerb_spin",
+                        start_st=float(k["st"]),
+                        last_st=self.last_st,
+                        lap=int(k.get("lap") or self._lap_num()),
+                        start_distance=float(k.get("lap_distance", -1.0)),
+                        end_distance=end_dist,
+                        max_slip=round(self._spin_slide["max_deg"], 1),
+                        max_g=float(k.get("max_g", 0.0)),
+                        max_speed_kmh=float(max(k.get("speed", 0.0), self._spin_slide["max_speed"])),
+                        min_speed_kmh=float(min(k.get("speed", 999.0), self._spin_slide["min_speed"])),
+                        wheels=set(k.get("wheels") or ()),
+                        surfaces=set(k.get("surfaces") or ()),
+                        in_pit=False,
+                        on_track=True,
+                    )
+                    rows.append(ep.as_dict())
+                    self._spin_slide["recorded"] = True
+                elif rows and rows[-1].get("start_st") == start_st:
+                    row = rows[-1]
+                    row["end_st"] = round(self.last_st, 3)
+                    row["duration_s"] = max(0.0, round(self.last_st - float(k["st"]), 3))
+                    row["end_distance"] = round(end_dist, 1)
+                    row["max_slip"] = round(max(float(row.get("max_slip") or 0.0), self._spin_slide["max_deg"]), 1)
+                    row["max_speed_kmh"] = round(max(float(row.get("max_speed_kmh") or 0.0), self._spin_slide["max_speed"]), 1)
+                    prev_min = row.get("min_speed_kmh")
+                    row["min_speed_kmh"] = round(min(float(prev_min if prev_min is not None else 999.0), self._spin_slide["min_speed"]), 1)
+        elif self._spin_slide is not None and (yaw_slip < 12.0 or v_kmh < 15.0 or in_pit):
+            self._spin_slide = None
+
+    def mark_contact_spin(self, start_st: float, end_st: float) -> None:
+        """Flag kerb_spin episodes overlapping a car-to-car contact spin."""
+        def overlaps(ep: dict) -> bool:
+            return (
+                float(ep.get("end_st", 0.0) or 0.0) >= start_st - 0.5
+                and float(ep.get("start_st", 0.0) or 0.0) <= end_st + 0.5
+            )
+
+        for ep in self.episode_current.get("kerb_spin", []):
+            if overlaps(ep):
+                ep["contact"] = True
+        if self.completed_laps:
+            last_eps = (self.completed_laps[-1].get("episodes") or {}).get("kerb_spin", {}).get("episodes", [])
+            for ep in last_eps:
+                if overlaps(ep):
+                    ep["contact"] = True
+
     def _reset_episodes(self) -> None:
         self.episode_current = {k: [] for k in EV.EPISODE_KINDS}
         self.episode_last_lap = {}
+        self._last_corner_kerb = None
+        self._spin_slide = None
         for tracker in self.episode_trackers.values():
             tracker.reset()
     def _record_completed_lap(
@@ -1030,6 +1169,22 @@ def analyze(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     return _analyze_impl(snapshot, active_feedback, enhanced=False)
 
 
+def _overlaps_kerb_spin(ep: dict, kerb_spins: list[dict]) -> bool:
+    if not kerb_spins:
+        return False
+    ep_lap = ep.get("lap")
+    s0 = float(ep.get("start_st", 0.0) or 0.0)
+    e0 = float(ep.get("end_st", s0) or s0)
+    for ks in kerb_spins:
+        if ep_lap is not None and ks.get("lap") is not None and int(ep_lap) != int(ks["lap"]):
+            continue
+        ks0 = float(ks.get("start_st", 0.0) or 0.0)
+        ks1 = float(ks.get("end_st", ks0) or ks0)
+        if e0 >= ks0 - 0.5 and s0 <= ks1 + 0.5:
+            return True
+    return False
+
+
 def analyze_v2(snapshot: dict, active_feedback: list[str] | None = None) -> dict:
     """Evidence-based engine used by the Engineer page.
 
@@ -1061,13 +1216,30 @@ def analyze_v2(snapshot: dict, active_feedback: list[str] | None = None) -> dict
     wear = EV.wear_estimate(laps_all, generation=filter_generation)
     temps = EV.temperature_summary(laps_all, window=3, generation=filter_generation)
     diag = dict(snapshot.get("diagnostics") or {})
+    config = snapshot.get("engineerConfig") or {}
+    current_kerb_spins = ((diag.get("episodes") or {}).get("kerb_spin") or {}).get("episodes") or []
+    kerb_spin = EV.kerb_spin_summary(
+        laps_all,
+        current_episodes=current_kerb_spins,
+        window=3,
+        generation=filter_generation,
+    )
+    kerb_spin_count = kerb_spin["count"] if kerb_spin["count"] else int(diag.get("kerbSpinEvents") or 0)
+    non_kerb_oversteer = (
+        sum(1 for ep in window["oversteer"]["episodes"] if not _overlaps_kerb_spin(ep, kerb_spin["episodes"]))
+        if kerb_spin["episodes"]
+        else window["oversteer"]["count"]
+    )
+    raw_spins = int(diag.get("soloSpinEvents", diag.get("spinEvents", 0)) or 0)
+    non_kerb_spins = max(0, raw_spins - kerb_spin_count)
     diag.update({
-        "oversteerEvents": window["oversteer"]["count"],
+        "oversteerEvents": non_kerb_oversteer,
         "understeerEvents": window["understeer"]["count"],
         "frontLockingEvents": window["front_lock"]["count"],
         "rearLockingEvents": window["rear_lock"]["count"],
         "kerbBottomingEvents": window["kerb"]["count"],
-        "spinEvents": diag.get("soloSpinEvents", diag.get("spinEvents", 0)),
+        "kerbSpinEvents": kerb_spin_count,
+        "spinEvents": non_kerb_spins,
         "episodeWindow": window,
     })
     snap = dict(snapshot)
@@ -1078,7 +1250,13 @@ def analyze_v2(snapshot: dict, active_feedback: list[str] | None = None) -> dict
         tel["tyresInnerTemperature"] = dict(temps["avg"])
     snap["telemetry"] = tel
 
-    config = snapshot.get("engineerConfig") or {}
+    setup = snapshot.get("setup") or {}
+    stiff_limit = int(config.get("kerb_stiff_suspension", DEFAULTS["kerb_stiff_suspension"]))
+    stiff_suspension = bool(
+        int(setup.get("frontSuspension", 0) or 0) > stiff_limit
+        or int(setup.get("rearSuspension", 0) or 0) > stiff_limit
+        or int(setup.get("rearAntiRollBar", 0) or 0) > stiff_limit
+    )
     kind = _session_kind(snapshot)
     remaining = _laps_remaining(snapshot) if kind == "race" else 0
     peak_wear = max((snapshot.get("damage", {}).get("tyresWear") or {0: 0}).values(), default=0)
@@ -1104,6 +1282,8 @@ def analyze_v2(snapshot: dict, active_feedback: list[str] | None = None) -> dict
         "high_speed_trigger": high_speed_trigger,
         "top_speed_trigger": top_speed_trigger,
         "top_speed_note": top_speed_note,
+        "kerb_spin": {**kerb_spin, "count": kerb_spin_count, "stiff_suspension": stiff_suspension},
+        "kerb_spin_trigger": bool(kerb_spin_count > 0),
         "laps_remaining": remaining,
     }
     evidence["causes"] = _attribution(snapshot, evidence)
@@ -1291,6 +1471,8 @@ def _analyze_impl(snapshot: dict, active_feedback: list[str] | None = None,
         balance += 2  # front tyres overheating = scrubbing/understeering
     if rear_inner_avg > front_inner_avg + 7:
         balance -= 2  # rear tyres overheating = spinning/oversteering
+    if enhanced and evidence.get("kerb_spin_trigger") and balance > -2:
+        balance = -2  # kerb-induced snap without blaming throttle-exit diff
 
     # DIAGNOSTIC 1: Corner entry understeer / turn-in bite
     if "understeer_entry" in fb or balance >= 3:
@@ -1437,16 +1619,106 @@ def _analyze_impl(snapshot: dict, active_feedback: list[str] | None = None,
                 "Low",
             )
 
-    # DIAGNOSTIC 4: Kerb striking & suspension bottoming
+    # DIAGNOSTIC 4: Kerb-induced corner spin & suspension bottoming
+    if enhanced and evidence.get("kerb_spin_trigger"):
+        ks = evidence.get("kerb_spin") or {}
+        ks_count = int(ks.get("count") or 0)
+        ks_wheels = set(ks.get("wheels") or [])
+        ks_corners = ks.get("corners") or []
+        stiff = bool(ks.get("stiff_suspension"))
+        where = f" (at {', '.join(ks_corners)})" if ks_corners else ""
+        if stiff:
+            issues.append(
+                {
+                    "title": "Corner Kerb Spin from Stiff Suspension",
+                    "description": (
+                        f"Car hit a kerb while cornering{where} and spun ({ks_count}x). "
+                        f"Stiff suspension (F:{target['frontSuspension']} / R:{target['rearSuspension']}, "
+                        f"Rear ARB:{target['rearAntiRollBar']}) unsettled the car over the kerb."
+                    ),
+                    "severity": "danger",
+                }
+            )
+        else:
+            issues.append(
+                {
+                    "title": "Kerb-Induced Spin in Corner",
+                    "description": (
+                        f"Car hit a kerb while cornering{where} and spun ({ks_count}x). "
+                        "Suspension springs are already soft; increase ride height clearance or avoid aggressive apex kerbs."
+                    ),
+                    "severity": "danger",
+                }
+            )
+
+        existing = {r["parameter"] for r in recommendations}
+        front_hit = bool(ks_wheels & {2, 3})
+        rear_hit = bool(ks_wheels & {0, 1})
+        for param, label, prio, reason in (
+            (
+                "rearSuspension",
+                "Rear Suspension Springs",
+                "High",
+                "Softens the rear springs so the rear axle absorbs corner kerbs instead of bouncing and snapping into a spin.",
+            ),
+            (
+                "frontSuspension",
+                "Front Suspension Springs",
+                "High" if (front_hit or not ks_wheels or target["frontSuspension"] >= 7) else "Medium",
+                "Softens the front springs so inside corner kerbs are absorbed without unsettling chassis balance.",
+            ),
+        ):
+            if param not in existing and target[param] > 3:
+                old = target[param]
+                step = 2 if old >= 8 else 1
+                target[param] = max(2, old - step)
+                rec("Suspension", param, label, old, target[param], target[param] - old, "clicks", reason, prio)
+                existing.add(param)
+
+        if "rearAntiRollBar" not in existing and target["rearAntiRollBar"] > 3:
+            old = target["rearAntiRollBar"]
+            target["rearAntiRollBar"] = max(2, old - 1)
+            prio = "High" if (rear_hit or old >= 6) else "Medium"
+            rec(
+                "Suspension",
+                "rearAntiRollBar",
+                "Rear Anti-Roll Bar",
+                old,
+                target["rearAntiRollBar"],
+                target["rearAntiRollBar"] - old,
+                "clicks",
+                "Softening the rear anti-roll bar increases single-wheel compliance over corner kerbs and reduces snap oversteer.",
+                prio,
+            )
+            existing.add("rearAntiRollBar")
+
+        if "frontRideHeight" not in existing and target["frontRideHeight"] < 5 and (not stiff or target["frontRideHeight"] <= 3):
+            old = target["frontRideHeight"]
+            target["frontRideHeight"] = min(6, old + 1)
+            target["rearRideHeight"] = min(7, target["rearRideHeight"] + 1)
+            rec(
+                "Suspension",
+                "frontRideHeight",
+                "Ride Height (Front & Rear)",
+                old,
+                target["frontRideHeight"],
+                1,
+                "clicks",
+                "Raises underfloor clearance to prevent bottoming out and stalling the floor over corner kerbs.",
+                "Medium",
+            )
+
     if "kerb_unstable" in fb or kerb_hits > 3:
-        issues.append(
-            {
-                "title": "Chassis Bottoming on Kerbs",
-                "description": "Suspension too stiff or ride height too low; bottoming out over curbs unsettled the car.",
-                "severity": "warning",
-            }
-        )
-        if target["frontSuspension"] > 3:
+        existing = {r["parameter"] for r in recommendations} if enhanced else set()
+        if not (enhanced and evidence.get("kerb_spin_trigger")):
+            issues.append(
+                {
+                    "title": "Chassis Bottoming on Kerbs",
+                    "description": "Suspension too stiff or ride height too low; bottoming out over curbs unsettled the car.",
+                    "severity": "warning",
+                }
+            )
+        if target["frontSuspension"] > 3 and "frontSuspension" not in existing:
             old = target["frontSuspension"]
             target["frontSuspension"] = max(2, target["frontSuspension"] - 1)
             rec(
@@ -1460,7 +1732,21 @@ def _analyze_impl(snapshot: dict, active_feedback: list[str] | None = None,
                 "Softens compliance so car absorbs rumble strips instead of skipping into the air.",
                 "Medium",
             )
-        if target["frontRideHeight"] < 5:
+        if enhanced and "kerb_unstable" in fb and target["rearSuspension"] > 3 and "rearSuspension" not in existing:
+            old = target["rearSuspension"]
+            target["rearSuspension"] = max(2, target["rearSuspension"] - 1)
+            rec(
+                "Suspension",
+                "rearSuspension",
+                "Rear Suspension Springs",
+                old,
+                target["rearSuspension"],
+                target["rearSuspension"] - old,
+                "clicks",
+                "Softens rear spring compliance so rumble strips do not kick the rear axle loose.",
+                "Medium",
+            )
+        if target["frontRideHeight"] < 5 and "frontRideHeight" not in existing:
             old = target["frontRideHeight"]
             target["frontRideHeight"] = min(6, target["frontRideHeight"] + 1)
             target["rearRideHeight"] = min(7, target["rearRideHeight"] + 1)
@@ -2191,6 +2477,13 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
             snap["diagnostics"]["soloSpinEvents"] = max(
                 0, c.counts.get("spins", 0) - c.counts.get("contact_spins", 0)
             )
+            for ep in ((snap["diagnostics"].get("episodes") or {}).get("kerb_spin") or {}).get("episodes", []):
+                if ep.get("corner") is None and float(ep.get("start_distance", -1.0) or -1.0) >= 0:
+                    ep["corner"] = s.corner(ep["start_distance"])
+            for lap in snap["completedLaps"]:
+                for ep in ((lap.get("episodes") or {}).get("kerb_spin") or {}).get("episodes", []):
+                    if ep.get("corner") is None and float(ep.get("start_distance", -1.0) or -1.0) >= 0:
+                        ep["corner"] = s.corner(ep["start_distance"])
         by_name[name.lower()] = dict(row, snapshot=snap)
     return roster, by_name
 

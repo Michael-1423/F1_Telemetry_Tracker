@@ -17,7 +17,7 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-EPISODE_KINDS = ("oversteer", "understeer", "kerb", "front_lock", "rear_lock")
+EPISODE_KINDS = ("oversteer", "understeer", "kerb", "kerb_spin", "front_lock", "rear_lock")
 
 # Same classification as model.lookups.OFF_SURFACES: tarmac/kerb/concrete and
 # the other hard surfaces are on-track, grass/gravel/water/etc. are not.
@@ -254,6 +254,51 @@ def episode_window(laps: list[dict], window: int = 3, generation: int | None = N
     out["laps_used"] = len(use)
     out["laps"] = [int(l.get("lap", 0) or 0) for l in use]
     return out
+
+
+def kerb_spin_summary(
+    laps: list[dict],
+    current_episodes: Iterable[Episode | dict] | None = None,
+    window: int = 3,
+    generation: int | None = None,
+) -> dict:
+    """Aggregate non-contact kerb-spin episodes across recent flying laps and the active lap.
+
+    Flying laps invalidated by the spin itself are still included (unlike pace/wear),
+    while pit/in/out laps and car-to-car contact spins are excluded.
+    """
+    use = []
+    for lap in laps:
+        if generation is not None and lap.get("setup_generation") is not None \
+                and int(lap["setup_generation"]) != int(generation):
+            continue
+        is_flying = not lap.get("pit") and str(lap.get("kind") or "flying") == "flying"
+        if lap_is_push(lap) or is_flying:
+            use.append(lap)
+    use = use[-max(1, int(window)):]
+
+    by_key: dict[tuple, dict] = {}
+    order: list[tuple] = []
+
+    def add_ep(item: Episode | dict) -> None:
+        ep = item.as_dict() if isinstance(item, Episode) else dict(item)
+        key = (ep.get("lap"), ep.get("start_st"))
+        if key in by_key:
+            # Prefer keeping the contact flag if either copy was flagged.
+            if ep.get("contact"):
+                by_key[key]["contact"] = True
+            return
+        by_key[key] = ep
+        order.append(key)
+
+    for lap in use:
+        for ep in (lap.get("episodes") or {}).get("kerb_spin", {}).get("episodes", []):
+            add_ep(ep)
+    for ep in current_episodes or ():
+        add_ep(ep)
+
+    kept = [by_key[k] for k in order if not by_key[k].get("contact")]
+    return summarize_episodes(kept)["kerb_spin"]
 
 
 def _lap_wear(lap: dict) -> tuple[float | None, float | None]:

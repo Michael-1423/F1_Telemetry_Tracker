@@ -5,6 +5,7 @@ Run directly:  python3 tests/test_evidence.py
 
 import copy
 import json
+import math
 import os
 import struct
 import sys
@@ -455,6 +456,144 @@ def test_v2_keeps_pending_advice_but_suppresses_changed_parameter():
     assert result["evidence"]["using_prechange_evidence"] is True
     assert "onThrottleDiff" not in params
     assert "rearAntiRollBar" in params
+
+
+def _motion_yaw(slip, susp_v=(0.0, 0.0, 0.0, 0.0), glat=0.0, st=0.0,
+                speed_ms=35.0, yaw_deg=0.0):
+    p = motion(slip, susp_v=susp_v, glat=glat, st=st)
+    p["carMotionData"][0].update(
+        worldVelocityX=0.0,
+        worldVelocityZ=speed_ms,
+        yaw=math.radians(yaw_deg),
+    )
+    return p
+
+
+def _setup_packet(front_susp=9, rear_susp=9, front_arb=5, rear_arb=8,
+                  front_rh=4, rear_rh=5, st=0.0):
+    p = blank(P.SETUPS, st)
+    p["carSetups"][0].update(
+        frontWing=7, rearWing=7, onThrottle=60, offThrottle=55,
+        frontCamber=-3.0, rearCamber=-1.5, frontToe=0.05, rearToe=0.30,
+        frontSuspension=front_susp, rearSuspension=rear_susp,
+        frontAntiRollBar=front_arb, rearAntiRollBar=rear_arb,
+        frontSuspensionHeight=front_rh, rearSuspensionHeight=rear_rh,
+        brakePressure=95, brakeBias=55,
+        frontLeftTyrePressure=23.0, frontRightTyrePressure=23.0,
+        rearLeftTyrePressure=21.0, rearRightTyrePressure=21.0,
+        ballast=5, fuelLoad=20.0,
+    )
+    return p
+
+
+def test_corner_kerb_spin_stiff_suspension_recognized_and_recommended():
+    f = E.EngineerFeed()
+    f.feed(_setup_packet(front_susp=9, rear_susp=9, rear_arb=8, st=0.0), 0)
+    f.feed(lap(4, 0, distance=1100.0, num=1, st=0.1), 0)
+    # Cornering onto a kerb (rumble strip + suspension velocity spike)
+    f.feed(telemetry(130, surfaces=(1, 0, 1, 0), steer=0.35, st=1.0), 0)
+    f.feed(_motion_yaw((0.05, 0.05, 0.05, 0.05), susp_v=(1500.0, 0.0, 1400.0, 0.0),
+                       glat=2.2, st=1.05, speed_ms=36.0, yaw_deg=5.0), 0)
+    # Car snaps sideways and spins off onto grass, invalidating the lap
+    f.feed(telemetry(110, surfaces=(7, 7, 0, 0), steer=-0.30, st=1.4), 0)
+    f.feed(_motion_yaw((0.40, 0.35, 0.05, 0.05), glat=1.2, st=1.45,
+                       speed_ms=30.0, yaw_deg=45.0), 0)
+    f.feed(_motion_yaw((0.45, 0.40, 0.05, 0.05), glat=0.6, st=1.8,
+                       speed_ms=25.0, yaw_deg=105.0), 0)
+
+    # Recognized immediately on the active lap
+    sess = {"sessionType": "Practice 1", "sessionTypeId": 1, "totalLaps": 20}
+    res_live = E.analyze_v2(f.snapshot("Driver", sess))
+    assert res_live["evidence"]["kerb_spin_trigger"] is True
+    assert res_live["evidence"]["kerb_spin"]["stiff_suspension"] is True
+    assert any(i["title"] == "Corner Kerb Spin from Stiff Suspension"
+               for i in res_live["diagnosedIssues"])
+    recs = {r["parameter"]: r for r in res_live["recommendations"]}
+    assert recs["rearSuspension"]["recommendedValue"] == 7
+    assert recs["frontSuspension"]["recommendedValue"] == 7
+    assert recs["rearAntiRollBar"]["recommendedValue"] == 7
+    assert "onThrottleDiff" not in recs  # not misdiagnosed as exit diff oversteer
+
+    # Still recognized after crossing the line even when the spin invalidated the lap
+    f.feed(lap(4, 0, distance=10.0, num=2, last=92.5, invalid=1, st=5.0), 0)
+    res_after = E.analyze_v2(f.snapshot("Driver", sess))
+    assert res_after["evidence"]["kerb_spin_trigger"] is True
+    assert res_after["evidence"]["kerb_spin"]["count"] == 1
+    assert "rearSuspension" in {r["parameter"] for r in res_after["recommendations"]}
+
+
+def test_straight_line_or_late_spin_is_not_corner_kerb_spin():
+    f = E.EngineerFeed()
+    f.feed(_setup_packet(front_susp=9, rear_susp=9, rear_arb=8, st=0.0), 0)
+    f.feed(lap(4, 0, distance=500.0, num=1, st=0.1), 0)
+    # Straight-line kerb hit (low lat_g, zero steer) -> not a corner kerb
+    f.feed(telemetry(200, surfaces=(1, 0, 1, 0), steer=0.0, st=1.0), 0)
+    f.feed(_motion_yaw((0, 0, 0, 0), susp_v=(1500.0, 0, 1500.0, 0),
+                       glat=0.1, st=1.05, speed_ms=55.0, yaw_deg=0.0), 0)
+    f.feed(_motion_yaw((0.4, 0.4, 0.05, 0.05), glat=0.2, st=1.4,
+                       speed_ms=40.0, yaw_deg=100.0), 0)
+    assert f.snapshot("Driver", {})["diagnostics"]["episodes"]["kerb_spin"]["count"] == 0
+
+    # Corner kerb hit, but spin happens > 2.5 s later -> separate event
+    f2 = E.EngineerFeed()
+    f2.feed(_setup_packet(front_susp=9, rear_susp=9, rear_arb=8, st=0.0), 0)
+    f2.feed(lap(4, 0, distance=500.0, num=1, st=0.1), 0)
+    f2.feed(telemetry(130, surfaces=(1, 0, 1, 0), steer=0.35, st=1.0), 0)
+    f2.feed(_motion_yaw((0, 0, 0, 0), susp_v=(1500.0, 0, 1500.0, 0),
+                        glat=2.0, st=1.05, speed_ms=36.0, yaw_deg=0.0), 0)
+    f2.feed(telemetry(130, surfaces=(0, 0, 0, 0), steer=0.35, st=5.0), 0)
+    f2.feed(_motion_yaw((0.4, 0.4, 0.05, 0.05), glat=1.5, st=5.0,
+                        speed_ms=30.0, yaw_deg=100.0), 0)
+    assert f2.snapshot("Driver", {})["diagnostics"]["episodes"]["kerb_spin"]["count"] == 0
+
+
+def test_corner_kerb_spin_soft_suspension_raises_ride_height():
+    f = E.EngineerFeed()
+    f.feed(_setup_packet(front_susp=2, rear_susp=2, rear_arb=2, front_rh=3, rear_rh=4, st=0.0), 0)
+    f.feed(lap(4, 0, distance=900.0, num=1, st=0.1), 0)
+    f.feed(telemetry(130, surfaces=(1, 0, 1, 0), steer=0.35, st=1.0), 0)
+    f.feed(_motion_yaw((0, 0, 0, 0), susp_v=(1500.0, 0, 1500.0, 0),
+                       glat=2.1, st=1.05, speed_ms=36.0, yaw_deg=0.0), 0)
+    f.feed(_motion_yaw((0.4, 0.4, 0.05, 0.05), glat=1.0, st=1.5,
+                       speed_ms=28.0, yaw_deg=100.0), 0)
+    res = E.analyze_v2(f.snapshot("Driver", {"sessionType": "Practice 1", "sessionTypeId": 1}))
+    assert res["evidence"]["kerb_spin_trigger"] is True
+    assert res["evidence"]["kerb_spin"]["stiff_suspension"] is False
+    assert any(i["title"] == "Kerb-Induced Spin in Corner" for i in res["diagnosedIssues"])
+    recs = {r["parameter"]: r for r in res["recommendations"]}
+    assert "rearSuspension" not in recs and "frontSuspension" not in recs
+    assert recs["frontRideHeight"]["recommendedValue"] == 4
+
+
+def test_contact_kerb_spin_is_excluded():
+    f = E.EngineerFeed()
+    f.feed(_setup_packet(front_susp=9, rear_susp=9, rear_arb=8, st=0.0), 0)
+    f.feed(lap(4, 0, distance=900.0, num=1, st=0.1), 0)
+    f.feed(telemetry(130, surfaces=(1, 0, 1, 0), steer=0.35, st=1.0), 0)
+    f.feed(_motion_yaw((0, 0, 0, 0), susp_v=(1500.0, 0, 1500.0, 0),
+                       glat=2.0, st=1.05, speed_ms=36.0, yaw_deg=0.0), 0)
+    f.feed(_motion_yaw((0.4, 0.4, 0.05, 0.05), glat=1.0, st=1.5,
+                       speed_ms=28.0, yaw_deg=100.0), 0)
+    f.mark_contact_spin(1.2, 1.6)
+    res = E.analyze_v2(f.snapshot("Driver", {"sessionType": "Practice 1", "sessionTypeId": 1}))
+    assert res["evidence"]["kerb_spin_trigger"] is False
+
+
+def test_kerb_spin_and_kerb_unstable_do_not_duplicate_parameters():
+    f = E.EngineerFeed()
+    f.feed(_setup_packet(front_susp=9, rear_susp=9, rear_arb=8, front_rh=3, rear_rh=4, st=0.0), 0)
+    f.feed(lap(4, 0, distance=900.0, num=1, st=0.1), 0)
+    f.feed(telemetry(130, surfaces=(1, 0, 1, 0), steer=0.35, st=1.0), 0)
+    f.feed(_motion_yaw((0, 0, 0, 0), susp_v=(1500.0, 0, 1500.0, 0),
+                       glat=2.0, st=1.05, speed_ms=36.0, yaw_deg=0.0), 0)
+    f.feed(_motion_yaw((0.4, 0.4, 0.05, 0.05), glat=1.0, st=1.5,
+                       speed_ms=28.0, yaw_deg=100.0), 0)
+    res = E.analyze_v2(
+        f.snapshot("Driver", {"sessionType": "Practice 1", "sessionTypeId": 1}),
+        active_feedback=["kerb_unstable", "oversteer_exit"],
+    )
+    params = [r["parameter"] for r in res["recommendations"]]
+    assert len(params) == len(set(params))
 
 
 if __name__ == "__main__":
