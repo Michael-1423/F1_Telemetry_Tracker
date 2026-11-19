@@ -82,10 +82,35 @@ def corner_metrics(trace: dict[int, tuple], onsets: list[tuple[float, int]], zon
         after = [trace[b][0] for b in bins if b >= apex]
         apex_row = trace[apex]
         steering = [abs(trace[b][3]) for b in bins]
+        brake_peak = round(max((trace[b][2] for b in bins if b <= apex), default=0.0), 2)
+        brk_bins = [b for b in bins if b <= apex + 2 and trace[b][2] >= 0.05]
+        if brk_bins and brake_peak >= 0.30:
+            last_brk = brk_bins[-1]
+            first_thr = next((b for b in bins if b > last_brk and trace[b][1] >= 0.05), None)
+            coast_m = sum(
+                BIN for b in bins
+                if b > last_brk and (first_thr is None or b < first_thr)
+                and trace[b][1] < 0.05 and trace[b][2] < 0.05
+            )
+        else:
+            coast_m = 0
+        overlap_m = sum(BIN for b in bins if trace[b][1] >= 0.2 and trace[b][2] >= 0.2)
+        throttle_delay_m = round(thr_on - apex_d, 1) if thr_on is not None else None
+        peak_exit_thr = 0.0
+        throttle_lift = False
+        for b in bins:
+            if b > apex:
+                tv = trace[b][1]
+                peak_exit_thr = max(peak_exit_thr, tv)
+                if peak_exit_thr >= 0.65 and peak_exit_thr - tv >= 0.25:
+                    throttle_lift = True
+                    break
         out[z["name"]] = {
             "min_v": trace[apex][0], "apex_d": apex_d, "gear": trace[apex][4],
             "brake_at": round(brake[0], 1) if brake else None, "entry_v": brake[1] if brake else None,
-            "throttle_at": thr_on, "exit_v": max(after) if after else None,
+            "brake_peak": brake_peak, "coast_m": coast_m, "overlap_m": overlap_m,
+            "throttle_at": thr_on, "throttle_delay_m": throttle_delay_m, "throttle_lift": throttle_lift,
+            "exit_v": max(after) if after else None,
             "steer_peak": round(max(steering), 2), "steer_at_apex": round(abs(apex_row[3]), 2),
             "brake_at_apex": round(apex_row[2], 2), "throttle_at_apex": round(apex_row[1], 2),
             "trail_braking": bool(apex_row[2] >= 0.1 and abs(apex_row[3]) >= 0.2),
@@ -105,6 +130,8 @@ def profile(laps: list[dict], zones: list[dict]) -> list[dict]:
     if not use:
         use = [l for l in laps if l.get("corners") and not l.get("standing") and l.get("timed", True) and not l.get("pit")]
         basis = "all laps"
+    timed_use = [l for l in use if (l.get("time") or 0) > 0]
+    ref_lap = min(timed_use, key=lambda l: l["time"]) if timed_use else None
     rows = []
     for z in zones:
         vals = [l["corners"].get(z["name"]) for l in use]
@@ -113,20 +140,32 @@ def profile(laps: list[dict], zones: list[dict]) -> list[dict]:
             continue
         bps = [v["brake_at"] for v in vals if v.get("brake_at") is not None]
         mins = [v["min_v"] for v in vals]
+        ref_corner = ref_lap["corners"].get(z["name"]) if ref_lap else None
         rows.append({
             "corner": z["name"], "start": z["start"], "end": z["end"], "laps": len(vals), "basis": basis,
-            "min_v": _mean(mins), "best_min_v": max(mins), "entry_v": _mean([v.get("entry_v") for v in vals]),
+            "min_v": _mean(mins), "best_min_v": max(mins), "apex_d": _mean([v.get("apex_d") for v in vals]),
+            "entry_v": _mean([v.get("entry_v") for v in vals]),
             "brake_at": _mean(bps), "brake_range": [round(min(bps)), round(max(bps))] if bps else None,
             "brake_spread": round(max(bps) - min(bps), 1) if len(bps) > 1 else None,
+            "brake_peak": _mean([v.get("brake_peak") for v in vals]),
+            "coast_m": _mean([v.get("coast_m") for v in vals]),
+            "overlap_m": _mean([v.get("overlap_m") for v in vals]),
             "brakes_pct": round(100 * len(bps) / len(vals)),
             "gear": statistics.mode([v["gear"] for v in vals]) if vals else None,
             "throttle_at": _mean([v.get("throttle_at") for v in vals]),
+            "throttle_delay_m": _mean([v.get("throttle_delay_m") for v in vals]),
+            "throttle_lift_pct": round(100 * sum(bool(v.get("throttle_lift")) for v in vals) / len(vals)),
             "exit_v": _mean([v.get("exit_v") for v in vals]),
+            "best_exit_v": max((v["exit_v"] for v in vals if v.get("exit_v") is not None), default=None),
             "steer_peak": _mean([v.get("steer_peak") for v in vals]),
             "steer_at_apex": _mean([v.get("steer_at_apex") for v in vals]),
             "brake_at_apex": _mean([v.get("brake_at_apex") for v in vals]),
             "throttle_at_apex": _mean([v.get("throttle_at_apex") for v in vals]),
             "trail_braking_pct": round(100 * sum(bool(v.get("trail_braking")) for v in vals) / len(vals)),
+            "ref_brake_at": ref_corner.get("brake_at") if ref_corner else None,
+            "ref_min_v": ref_corner.get("min_v") if ref_corner else None,
+            "ref_exit_v": ref_corner.get("exit_v") if ref_corner else None,
+            "ref_throttle_delay_m": ref_corner.get("throttle_delay_m") if ref_corner else None,
         })
     return rows
 

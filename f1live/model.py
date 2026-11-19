@@ -141,6 +141,7 @@ class Car:
         self._fuel_lap_start: float | None = None
         self._ers: tuple | None = None
         self.excursions: list[dict] = []     # 2+ wheels beyond the kerbs; later classed as corner cut / ran wide
+        self.corner_events: list[dict] = []  # per-corner lockups, wheelspin, and solo slides/spins
         self.cur_exc: list[int] = []
         self._exc: dict | None = None
         self._exc_last_end = -1e9
@@ -290,6 +291,15 @@ class Session:
                 if z["start"] <= lap_distance < z["end"]:
                     return z["name"]
         return L.corner_name(self.track_id, lap_distance, self.track_length, self.custom_corners)
+
+    def corner_for_distance(self, lap_distance: float | None) -> str | None:
+        if lap_distance is None or lap_distance < 0:
+            return None
+        if self.zones:
+            for z in self.zones:
+                if z["start"] <= lap_distance <= z["end"]:
+                    return z["name"]
+        return self.corner(lap_distance)
 
     def display_name(self, idx: int) -> str:
         c = self.cars[idx] if 0 <= idx < 22 else None
@@ -1133,7 +1143,11 @@ class Session:
         # ---- slides and spins
         if not in_pit and v_kmh > self.det["slide_min_kmh"] and a > self.det["slide_deg"]:
             if c._slide is None:
-                c._slide = {"st": st, "max": a, "v": v_kmh, "d": lapd, "wall": wall}
+                c._slide = {
+                    "st": st, "max": a, "v": v_kmh, "d": lapd, "wall": wall,
+                    "brk": round(float(c.tel.get("brake", 0.0) or 0.0), 2),
+                    "thr": round(float(c.tel.get("throttle", 0.0) or 0.0), 2),
+                }
             c._slide["max"] = max(c._slide["max"], a)
         elif c._slide is not None and (a < 12 or v_kmh < 15):
             s, c._slide = c._slide, None
@@ -1148,11 +1162,22 @@ class Session:
                           st=s["st"], wall=s["wall"], capture=True, lap_distance=s["d"],
                           data={"max_deg": round(s["max"]), "speed": round(s["v"]),
                                 "contact": bool(recent_contact)})
+                if not recent_contact:
+                    self._record_corner_event(c, {
+                        "lap": c.lap_num, "st": round(s["st"], 2), "d": round(s["d"], 1),
+                        "kind": "spin", "max_deg": round(s["max"]), "speed": round(s["v"]),
+                        "brake": s.get("brk", 0.0), "throttle": s.get("thr", 0.0),
+                    })
             else:
                 c.counts["slides"] += 1
                 self.emit("slide", "minor", [c.idx], f"Big slide at {where} ({s['max']:.0f}°)",
                           st=s["st"], wall=s["wall"], lap_distance=s["d"],
                           data={"max_deg": round(s["max"]), "speed": round(v_kmh)})
+                self._record_corner_event(c, {
+                    "lap": c.lap_num, "st": round(s["st"], 2), "d": round(s["d"], 1),
+                    "kind": "slide", "max_deg": round(s["max"]), "speed": round(s["v"]),
+                    "brake": s.get("brk", 0.0), "throttle": s.get("thr", 0.0),
+                })
         # ---- reversing (e.g. missed pit entry, recovering from a spin)
         if 5 < v_kmh < 60 and a > self.det["reverse_deg"] and not in_pit:
             if c._rev is None:
@@ -1201,15 +1226,35 @@ class Session:
         if c.own and c.extra and not in_pit and v_kmh > 50:
             ws = c.extra.get("wheelSlip") or [0, 0, 0, 0]   # wheel order: RL, RR, FL, FR
             brk, thr = c.tel.get("brake", 0), c.tel.get("throttle", 0)
+            steer_abs = round(abs(float(c.tel.get("steer", 0.0) or 0.0)), 2)
             lock = min(ws) < self.det["lockup_slip"] and brk > 0.2
             spin = max(ws[:2]) > self.det["wheelspin_slip"] and thr > 0.3
             if lock and not c._lock_on:
                 c.counts["lockups"] += 1
                 c.cur_style["lockups"] += 1
+                front_lock = len(ws) >= 4 and min(ws[2], ws[3]) < self.det["lockup_slip"]
+                rear_lock = len(ws) >= 2 and min(ws[0], ws[1]) < self.det["lockup_slip"]
+                kind = "rear_lockup" if (rear_lock and not front_lock) else "front_lockup"
+                self._record_corner_event(c, {
+                    "lap": c.lap_num, "st": round(st, 2), "d": round(lapd, 1),
+                    "kind": kind, "speed": round(v_kmh),
+                    "brake": round(brk, 2), "throttle": round(thr, 2), "steer": steer_abs,
+                })
             if spin and not c._spin_on:
                 c.counts["wheelspin"] += 1
                 c.cur_style["wheelspin"] += 1
+                self._record_corner_event(c, {
+                    "lap": c.lap_num, "st": round(st, 2), "d": round(lapd, 1),
+                    "kind": "wheelspin", "speed": round(v_kmh),
+                    "brake": round(brk, 2), "throttle": round(thr, 2), "steer": steer_abs,
+                })
             c._lock_on, c._spin_on = lock, spin
+
+    @staticmethod
+    def _record_corner_event(c: Car, event: dict) -> None:
+        c.corner_events.append(event)
+        if len(c.corner_events) > 250:
+            del c.corner_events[:-200]
 
     # -------------------------------------------------------------- queries
     def gaps(self) -> dict[int, dict]:
@@ -1260,6 +1305,24 @@ class Session:
 
     def corner_profile(self, c: Car) -> list[dict]:
         return LP.profile(c.laps, self.zones)
+
+    def corner_mistakes(self, c: Car, max_laps: int = 5) -> list[dict]:
+        """Recent per-corner mistakes (lockups, wheelspin, slides/spins, off-track wide/cut)."""
+        min_lap = max(0, c.lap_num - max_laps + 1)
+        out: list[dict] = []
+        for item in c.corner_events:
+            if int(item.get("lap", 0) or 0) < min_lap:
+                continue
+            corner = self.corner_for_distance(item.get("d")) or item.get("corner")
+            out.append({**item, "corner": corner})
+        for item in c.excursions:
+            if int(item.get("lap", 0) or 0) < min_lap:
+                continue
+            if item.get("kind") not in ("wide", "cut"):
+                continue
+            corner = self.corner_for_distance(item.get("d")) or item.get("corner")
+            out.append({**item, "corner": corner})
+        return out
 
     def corner_stats(self, c: Car) -> dict:
         """Per-corner averages keyed by corner name (in the summary)."""

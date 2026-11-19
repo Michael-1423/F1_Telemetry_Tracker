@@ -946,6 +946,379 @@ def _corner_style_recommendations(
     return out
 
 
+_PRIO_RANK = {"High": 0, "Medium": 1, "Low": 2}
+_SEV_RANK = {"danger": 0, "warning": 1, "info": 2}
+
+
+def _is_valid_corner_name(name: str | None) -> bool:
+    return bool(name and name != "?" and "straight" not in name.lower())
+
+
+def _collect_corner_episode_counts(
+    snapshot: dict, zone_start: dict[str, float]
+) -> dict[str, dict[str, int]]:
+    """Aggregate deduplicated episode counts per corner across window and active lap."""
+    ep_counts: dict[str, dict[str, int]] = {}
+    seen: set[tuple] = set()
+    sources = [
+        (snapshot.get("_evidence") or {}).get("episodes")
+        or (snapshot.get("diagnostics") or {}).get("episodeWindow")
+        or {},
+        (snapshot.get("diagnostics") or {}).get("episodes") or {},
+    ]
+    for src in sources:
+        for kind in ("front_lock", "rear_lock", "oversteer", "understeer"):
+            for ep in (src.get(kind) or {}).get("episodes", []):
+                key = (kind, ep.get("lap"), ep.get("start_st"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                corner = ep.get("corner")
+                if not _is_valid_corner_name(corner):
+                    continue
+                row = ep_counts.setdefault(
+                    corner,
+                    {"front_lock": 0, "rear_lock": 0, "oversteer": 0, "understeer": 0},
+                )
+                row[kind] += 1
+                dist = ep.get("start_distance")
+                if dist is not None and float(dist) >= 0:
+                    zone_start.setdefault(corner, float(dist))
+    return ep_counts
+
+
+def _evaluate_corner_suggestions(
+    corner: str, p: dict, m: dict, e: dict
+) -> list[dict]:
+    """Evaluate braking, throttle, and line mistakes for one corner."""
+    cands: list[dict] = []
+
+    def add(category: str, mistake: str, severity: str, priority: str, metric: str, correction: str, count: int) -> None:
+        cands.append({
+            "corner": corner,
+            "category": category,
+            "mistake": mistake,
+            "severity": severity,
+            "priority": priority,
+            "metric": metric,
+            "correction": correction,
+            "count": int(count),
+        })
+
+    laps = int(p.get("laps") or 0)
+    brake_at = p.get("brake_at")
+    brake_range = p.get("brake_range")
+    brake_spread = p.get("brake_spread")
+    brakes_pct = p.get("brakes_pct") or 0
+    min_v = p.get("min_v")
+    exit_v = p.get("exit_v")
+    best_exit_v = p.get("best_exit_v")
+    coast_m = p.get("coast_m")
+    overlap_m = p.get("overlap_m")
+    throttle_delay_m = p.get("throttle_delay_m")
+    throttle_lift_pct = p.get("throttle_lift_pct") or 0
+    brake_at_apex = float(p.get("brake_at_apex") or 0.0)
+    throttle_at_apex = float(p.get("throttle_at_apex") or 0.0)
+    steer_at_apex = float(p.get("steer_at_apex") or 0.0)
+    ref_brake_at = p.get("ref_brake_at")
+    ref_min_v = p.get("ref_min_v")
+    ref_throttle_delay_m = p.get("ref_throttle_delay_m")
+
+    # ---- Braking rules
+    fl_total = m["front_lockup"] + e["front_lock"]
+    if fl_total >= 1:
+        if brake_at_apex >= 0.25 or m["lockup_steer"] >= 0.25:
+            corr = (
+                f"At {corner}, release peak brake pressure earlier before turn-in and trail off "
+                "smoothly instead of holding heavy brake with steering lock."
+            )
+        else:
+            corr = (
+                f"At {corner}, brake 5–10 m earlier and bleed off peak brake pressure as speed "
+                "and downforce drop."
+            )
+        add(
+            "Braking",
+            "Front Lockup Under Braking",
+            "danger",
+            "High",
+            f"{fl_total} front lockup{'s' if fl_total != 1 else ''}",
+            corr,
+            fl_total,
+        )
+
+    rl_total = m["rear_lockup"] + e["rear_lock"] + m["brake_spin_slide"]
+    if rl_total >= 1:
+        add(
+            "Braking",
+            "Rear Instability Under Braking",
+            "danger",
+            "High",
+            f"{rl_total} braking snap/lockup{'s' if rl_total != 1 else ''}",
+            f"At {corner}, do your heaviest braking in a straight line before turn-in, delay downshifts slightly, and release the brake smoothly into the apex.",
+            rl_total,
+        )
+
+    is_braking_corner = (brakes_pct >= 50) or (brake_at is not None) or (brake_at_apex >= 0.25)
+    late_brake_wide = m["wide"] >= 1 and is_braking_corner
+    late_brake_apex = laps >= 2 and brake_at_apex >= 0.40 and steer_at_apex >= 0.35
+    fired_rule3 = late_brake_wide or late_brake_apex
+    if fired_rule3:
+        cnt = m["wide"] if late_brake_wide else laps
+        metric = (
+            f"{m['wide']}x ran wide on entry"
+            if late_brake_wide
+            else f"Brake {round(brake_at_apex * 100)}% at apex"
+        )
+        add(
+            "Braking",
+            "Braking Too Late / Overshooting Entry",
+            "warning",
+            "High",
+            metric,
+            f"At {corner}, brake 10–15 m earlier and finish deceleration before turn-in so the front tyres can rotate to the apex instead of pushing wide.",
+            cnt,
+        )
+
+    if laps >= 2 and brake_spread is not None and brake_spread >= 25.0:
+        rng_txt = (
+            f" ({brake_range[0]}–{brake_range[1]} m)"
+            if brake_range and len(brake_range) == 2
+            else ""
+        )
+        target_m = f" near {round(brake_at)} m" if brake_at is not None else ""
+        add(
+            "Braking",
+            "Inconsistent Braking Point",
+            "warning",
+            "Medium",
+            f"{round(brake_spread)} m spread{rng_txt}",
+            f"At {corner}, pick a fixed visual brake marker{target_m} and commit to the same reference point each lap.",
+            laps,
+        )
+
+    if laps >= 2 and overlap_m is not None and overlap_m >= 10.0:
+        add(
+            "Braking",
+            "Brake & Throttle Overlap",
+            "warning",
+            "Medium",
+            f"~{round(overlap_m)} m pedal overlap",
+            f"At {corner}, separate your pedals cleanly: fully lift off throttle before braking and release the brake before picking up exit throttle.",
+            laps,
+        )
+
+    if (
+        fl_total == 0
+        and rl_total == 0
+        and not fired_rule3
+        and laps >= 2
+        and brake_at is not None
+        and ref_brake_at is not None
+        and (ref_brake_at - brake_at) >= 15.0
+        and min_v is not None
+        and ref_min_v is not None
+        and (ref_min_v - min_v) >= 6.0
+    ):
+        delta_m = round(ref_brake_at - brake_at)
+        delta_v = round(ref_min_v - min_v)
+        add(
+            "Braking",
+            "Braking Too Early / Over-Slowing",
+            "info",
+            "Medium",
+            f"{delta_m} m earlier, -{delta_v} km/h apex",
+            f"At {corner}, push your braking point closer to {round(ref_brake_at)} m and release slightly sooner to carry closer to {round(ref_min_v)} km/h at the apex.",
+            laps,
+        )
+
+    if laps >= 2 and coast_m is not None and coast_m >= 25.0:
+        add(
+            "Braking",
+            "Excessive Coasting Mid-Corner",
+            "info",
+            "Medium" if coast_m >= 40 else "Low",
+            f"~{round(coast_m)} m coasting",
+            f"At {corner}, reduce dead coasting between brake release and throttle pickup with light trail braking or earlier maintenance throttle.",
+            laps,
+        )
+
+    # ---- Throttle rules
+    thr_total = m["wheelspin"] + m["throttle_spin_slide"] + e["oversteer"]
+    fired_rule8 = thr_total >= 1
+    if fired_rule8:
+        if throttle_at_apex >= 0.35 or steer_at_apex >= 0.45:
+            corr = (
+                f"At {corner}, squeeze the throttle progressively as steering unwinds instead of "
+                "jumping on power while steering is still loaded, or short-shift one gear on exit."
+            )
+        else:
+            corr = (
+                f"At {corner}, roll onto throttle more progressively on exit and "
+                "short-shift one gear if traction breaks."
+            )
+        add(
+            "Throttle",
+            "Wheelspin / Oversteer on Throttle Exit",
+            "danger",
+            "High",
+            f"{thr_total} exit traction loss{'es' if thr_total != 1 else ''}",
+            corr,
+            thr_total,
+        )
+
+    fired_rule9 = not fired_rule8 and laps >= 2 and throttle_lift_pct >= 50
+    if fired_rule9:
+        add(
+            "Throttle",
+            "Abrupt Early Throttle (Mid-Exit Lift)",
+            "warning",
+            "Medium",
+            f"Lifted on {round(throttle_lift_pct)}% of laps",
+            f"At {corner}, wait a beat longer at the apex until rotated toward the exit, then commit in one smooth progressive squeeze instead of stabbing early and lifting.",
+            laps,
+        )
+
+    delay_cond = (
+        throttle_delay_m is not None
+        and ref_throttle_delay_m is not None
+        and (throttle_delay_m - ref_throttle_delay_m) >= 15.0
+    )
+    exit_v_cond = (
+        best_exit_v is not None
+        and exit_v is not None
+        and (best_exit_v - exit_v) >= 8.0
+        and throttle_delay_m is not None
+        and throttle_delay_m >= 35.0
+    )
+    if not fired_rule8 and not fired_rule9 and laps >= 2 and (delay_cond or exit_v_cond):
+        metric = (
+            f"+{round(throttle_delay_m - ref_throttle_delay_m)} m later full throttle"
+            if delay_cond
+            else f"-{round(best_exit_v - exit_v)} km/h exit speed"
+        )
+        add(
+            "Throttle",
+            "Late Full-Throttle Pickup on Exit",
+            "info",
+            "Medium",
+            metric,
+            f"At {corner}, unwind steering earlier past the apex and commit smoothly to 100% throttle sooner for stronger straight-line exit speed.",
+            laps,
+        )
+
+    # ---- Cornering / line rules
+    if e["understeer"] >= 1 or (m["wide"] >= 1 and not fired_rule3):
+        u_count = max(e["understeer"], m["wide"] if not fired_rule3 else 0)
+        add(
+            "Cornering",
+            "Mid-Corner Understeer / Running Wide",
+            "warning",
+            "Medium",
+            f"{u_count}x understeer/wide",
+            f"At {corner}, carry slightly less entry speed with a brief lift or light trail brake to load the front axle, and avoid adding extra steering lock once the fronts scrub.",
+            u_count,
+        )
+
+    if m["cut"] >= 1:
+        add(
+            "Cornering",
+            "Cutting Inside Kerb (Track Limits)",
+            "warning",
+            "Medium",
+            f"{m['cut']}x corner cut{'s' if m['cut'] != 1 else ''}",
+            f"At {corner}, delay turn-in slightly to keep two wheels on track and avoid lap invalidations or track-limits penalties.",
+            m["cut"],
+        )
+
+    return cands
+
+
+def build_corner_suggestions(snapshot: dict) -> list[dict]:
+    """Identify specific corners with braking/throttle/line mistakes and how to correct them."""
+    corner_profile = snapshot.get("cornerProfile") or snapshot.get("corner_profile") or []
+    corner_mistakes = snapshot.get("cornerMistakes") or snapshot.get("corner_mistakes") or []
+
+    zone_start: dict[str, float] = {}
+    prof_by_corner: dict[str, dict] = {}
+    for row in corner_profile:
+        corner = row.get("corner")
+        if not _is_valid_corner_name(corner):
+            continue
+        prof_by_corner[corner] = row
+        if row.get("start") is not None:
+            zone_start[corner] = float(row["start"])
+
+    mistakes_by_corner: dict[str, dict] = {}
+    for item in corner_mistakes:
+        corner = item.get("corner")
+        if not _is_valid_corner_name(corner):
+            continue
+        bucket = mistakes_by_corner.setdefault(
+            corner,
+            {
+                "front_lockup": 0,
+                "rear_lockup": 0,
+                "wheelspin": 0,
+                "wide": 0,
+                "cut": 0,
+                "brake_spin_slide": 0,
+                "throttle_spin_slide": 0,
+                "lockup_steer": 0.0,
+            },
+        )
+        kind = item.get("kind")
+        if kind in ("front_lockup", "rear_lockup", "wheelspin", "wide", "cut"):
+            bucket[kind] += 1
+        if kind in ("front_lockup", "rear_lockup"):
+            bucket["lockup_steer"] = max(bucket["lockup_steer"], float(item.get("steer") or 0.0))
+        elif kind in ("slide", "spin"):
+            if float(item.get("brake") or 0.0) >= 0.30:
+                bucket["brake_spin_slide"] += 1
+            if float(item.get("throttle") or 0.0) >= 0.40:
+                bucket["throttle_spin_slide"] += 1
+        if item.get("d") is not None and float(item["d"]) >= 0:
+            zone_start.setdefault(corner, float(item["d"]))
+
+    ep_counts = _collect_corner_episode_counts(snapshot, zone_start)
+    all_corners = set(prof_by_corner) | set(mistakes_by_corner) | set(ep_counts)
+    empty_m = {
+        "front_lockup": 0, "rear_lockup": 0, "wheelspin": 0, "wide": 0, "cut": 0,
+        "brake_spin_slide": 0, "throttle_spin_slide": 0, "lockup_steer": 0.0,
+    }
+    empty_e = {"front_lock": 0, "rear_lock": 0, "oversteer": 0, "understeer": 0}
+
+    selected: list[dict] = []
+    for corner in sorted(all_corners):
+        if not _is_valid_corner_name(corner):
+            continue
+        cands = _evaluate_corner_suggestions(
+            corner,
+            prof_by_corner.get(corner, {}),
+            mistakes_by_corner.get(corner, empty_m),
+            ep_counts.get(corner, empty_e),
+        )
+        if not cands:
+            continue
+        cands.sort(key=lambda x: (_PRIO_RANK[x["priority"]], _SEV_RANK[x["severity"]], -x["count"]))
+        chosen = [cands[0]]
+        if len(cands) > 1:
+            second = next((x for x in cands[1:] if x["category"] != cands[0]["category"]), cands[1])
+            chosen.append(second)
+        selected.extend(chosen)
+
+    selected.sort(
+        key=lambda x: (
+            _PRIO_RANK[x["priority"]],
+            _SEV_RANK[x["severity"]],
+            -x["count"],
+            zone_start.get(x["corner"], 1e9),
+            x["corner"],
+        )
+    )
+    return selected[:12]
+
+
 def _driving_style_recommendations(
     target: dict, style: dict, oversteer_count: int, understeer_count: int
 ) -> list[dict]:
@@ -1911,6 +2284,7 @@ def _analyze_impl(snapshot: dict, active_feedback: list[str] | None = None,
         snapshot, label, recommendations[0] if recommendations else None,
         wear_per_lap=brief_wear,
     )
+    corner_suggestions = build_corner_suggestions(snapshot)
     result = {
         "radioMessage": briefing["radioMessage"],
         "briefing": briefing,
@@ -1924,6 +2298,8 @@ def _analyze_impl(snapshot: dict, active_feedback: list[str] | None = None,
         result["drivingStyle"] = snapshot["drivingStyle"]
     if result_style:
         result["cornerAnalysis"] = result_style
+    if enhanced or corner_suggestions:
+        result["cornerSuggestions"] = corner_suggestions
     return result
 
 
@@ -2141,6 +2517,56 @@ def session_briefing(
     }
 
 
+def _fill_summary_corners(s, summary: dict, *, copy_rows: bool = False) -> dict:
+    """Resolve missing corner names on episode summaries using Session.corner_for_distance."""
+    out = dict(summary) if copy_rows else summary
+    for kind, row in list(out.items()):
+        eps = (row or {}).get("episodes")
+        if not eps:
+            continue
+        changed = False
+        new_eps = []
+        for ep in eps:
+            dist = ep.get("start_distance")
+            if ep.get("corner") is None and dist is not None and float(dist) >= 0:
+                corner = s.corner_for_distance(float(dist))
+                if corner:
+                    ep_copy = dict(ep) if copy_rows else ep
+                    ep_copy["corner"] = corner
+                    new_eps.append(ep_copy)
+                    changed = True
+                    continue
+            new_eps.append(dict(ep) if copy_rows else ep)
+        if changed:
+            target_row = dict(row) if copy_rows else row
+            target_row["episodes"] = new_eps
+            target_row["corners"] = sorted({e["corner"] for e in new_eps if e.get("corner")})
+            out[kind] = target_row
+    return out
+
+
+def _attach_episode_corners(s, snap: dict) -> None:
+    """Attach corner names to active and completed-lap episodes without mutating EngineerFeed state."""
+    diag_eps = (snap.get("diagnostics") or {}).get("episodes")
+    if isinstance(diag_eps, dict):
+        _fill_summary_corners(s, diag_eps, copy_rows=False)
+    laps = snap.get("completedLaps")
+    if isinstance(laps, list):
+        for i, lap in enumerate(laps):
+            eps_map = lap.get("episodes") if isinstance(lap, dict) else None
+            if not isinstance(eps_map, dict):
+                continue
+            needs = any(
+                ep.get("corner") is None and ep.get("start_distance") is not None and float(ep["start_distance"]) >= 0
+                for row in eps_map.values()
+                for ep in (row or {}).get("episodes", [])
+            )
+            if needs:
+                lap_copy = dict(lap)
+                lap_copy["episodes"] = _fill_summary_corners(s, eps_map, copy_rows=True)
+                laps[i] = lap_copy
+
+
 # ------------------------------------------------------------------------------------ dashboard glue
 def inputs(s) -> tuple[list[dict], dict[str, dict]]:
     """Per human driver: a roster row for the dashboard and the engine input (keyed by lower-case name).
@@ -2165,7 +2591,9 @@ def inputs(s) -> tuple[list[dict], dict[str, dict]]:
         if snap is not None:
             snap["engineerConfig"] = dict(s.engineer_th or {})
             snap["cornerProfile"] = s.corner_profile(c)
+            snap["cornerMistakes"] = s.corner_mistakes(c)
             snap["drivingStyle"] = s.style_metrics(c)
+            _attach_episode_corners(s, snap)
             # Keep the in-progress 5 m trace separate from completed-lap analysis so the
             # engineer view can plot pedal inputs before the lap is closed.
             trace = list(c.live_pedal_trace)
