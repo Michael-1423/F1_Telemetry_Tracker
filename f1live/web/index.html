@@ -384,6 +384,18 @@ body.eng-dark .msgbox .muted{color:#a3a3a3}
 .re-delta.down{background:#450a0a;color:#f87171;border-color:#991b1b}
 .re-why{font-size:.75rem;color:#d4d4d4;background:rgba(23,23,23,.6);padding:.625rem;border-radius:.5rem;border:1px solid rgba(38,38,38,.6);line-height:1.5}
 .re-why b{color:#22d3ee;font-weight:600}
+.re-corner{background:#164e63;color:#22d3ee;padding:.125rem .5rem;border-radius:.25rem;font-size:.75rem;font-weight:700}
+.re-cat.braking{background:rgba(239,68,68,.16);color:#f87171}
+.re-cat.throttle{background:rgba(245,158,11,.16);color:#fbbf24}
+.re-cat.cornering{background:rgba(34,211,238,.16);color:#22d3ee}
+.re-metric{font-size:.75rem;color:#a3a3a3}
+.re-prio{padding:.125rem .45rem;border-radius:.25rem;font-size:10px;font-weight:700;text-transform:uppercase;border:1px solid}
+.re-prio.danger{background:#450a0a;color:#f87171;border-color:#991b1b}
+.re-prio.warning{background:#451a03;color:#fbbf24;border-color:#92400e}
+.re-prio.info{background:#083344;color:#22d3ee;border-color:#155e75}
+.re-sec-h{display:flex;align-items:center;justify-content:space-between;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#a3a3a3;padding-top:.5rem;border-top:1px solid #262626}
+.re-link{background:none;border:0;color:#22d3ee;font-size:.72rem;font-weight:700;cursor:pointer;padding:0}
+.re-link:hover{text-decoration:underline}
 .re-ok{background:#0a0a0a;padding:1.5rem;border-radius:.75rem;border:1px solid #262626;text-align:center;display:grid;gap:.5rem;justify-items:center}
 .re-ok svg{width:2rem;height:2rem;color:#34d399}
 .re-ok b{font-size:.875rem;color:#fff}
@@ -968,15 +980,24 @@ function renderEngineer(){
   renderLiveTrace(E);
   put('reFb',`<div class="re-fbh"><h4>${ICON.sliders} Driver Handling Feedback</h4><span>Select what you feel to fine-tune setup clicks</span></div>
     <div class="re-fbgrid">${E.options.map(o=>`<button type="button" class="re-fb" data-fb="${esc(o.id)}" aria-pressed="${engFb.includes(o.id)}" title="${esc(o.description)}"><b>${esc(o.label)}</b><span>${esc(o.description)}</span></button>`).join('')}</div>`);
-  const recs=A.recommendations,copied=Date.now()<copiedUntil;
-  put('reTabs',`<div role="tablist"><button type="button" role="tab" class="re-tab" data-retab="recommendations" aria-selected="${engTab==='recommendations'}">Recommended Setup Adjustments (${recs.length})</button>
+  const recs=A.recommendations,cs=A.cornerSuggestions||[],copied=Date.now()<copiedUntil;
+  put('reTabs',`<div role="tablist"><button type="button" role="tab" class="re-tab" data-retab="recommendations" aria-selected="${engTab==='recommendations'}">Setup Adjustments (${recs.length})</button>
+      <button type="button" role="tab" class="re-tab" data-retab="corners" aria-selected="${engTab==='corners'}">Corner Coaching (${cs.length})</button>
       <button type="button" role="tab" class="re-tab" data-retab="full_sheet" aria-selected="${engTab==='full_sheet'}">Complete F1 2020 Garage Setup Sheet</button></div>
     <button type="button" class="re-copy" data-act="copySetup">${copied?ICON.check.replace('<svg','<svg class="ok"'):ICON.copy}${copied?'Copied to Clipboard!':'Copy Full Setup'}</button>`);
   const tgt=A.targetSetup;
-  put('reBody',engTab==='recommendations'?(recs.length?recs.map(r=>`<div class="re-rec"><div class="re-rech"><div><span class="re-cat">${esc(r.category)}</span><span class="re-rl">${esc(r.label)}</span></div>
+  const cornerCard=c=>`<div class="re-rec"><div class="re-rech"><div><span class="re-corner">${esc(c.corner)}</span><span class="re-cat ${esc(c.category.toLowerCase())}">${esc(c.category)}</span><span class="re-rl">${esc(c.mistake)}</span></div>
+        <div class="re-vals"><span class="re-metric">${esc(c.metric)}</span><span class="re-prio ${esc(c.severity)}">${esc(c.priority)}</span></div></div>
+        <p class="re-why"><b>How to Correct: </b>${esc(c.correction)}</p></div>`;
+  const recHtml=recs.length?recs.map(r=>`<div class="re-rec"><div class="re-rech"><div><span class="re-cat">${esc(r.category)}</span><span class="re-rl">${esc(r.label)}</span></div>
         <div class="re-vals"><span class="cur">Current: <b>${esc(r.currentValue)}</b></span>${ICON.arrow}<span class="to">Recommended: ${esc(r.recommendedValue)} ${esc(r.unit)}</span><span class="re-delta ${r.delta>0?'up':'down'}">${r.delta>0?'+'+r.delta:r.delta}</span></div></div>
         <p class="re-why"><b>Race Engineer Rationale: </b>${esc(r.reason)}</p></div>`).join('')
-      :`<div class="re-ok">${ICON.ok}<b>Car Setup is Currently Optimal</b><p>Telemetry shows balanced tyre degradation, stable cornering Gs, and zero excessive wheel slip for ${esc(E.car.session.trackName)}.</p></div>`)
+      :`<div class="re-ok">${ICON.ok}<b>Car Setup is Currently Optimal</b><p>Telemetry shows balanced tyre degradation, stable cornering Gs, and zero excessive wheel slip for ${esc(E.car.session.trackName)}.</p></div>`;
+  const cornerSection=cs.length?`<div class="re-sec-h"><span>Corner Throttle &amp; Braking Coaching</span>${cs.length>4?`<button type="button" class="re-link" data-retab="corners">View all (${cs.length})</button>`:''}</div>${cs.slice(0,4).map(cornerCard).join('')}`:'';
+  const cornersTabHtml=cs.length?cs.map(cornerCard).join('')
+    :`<div class="re-ok">${ICON.ok}<b>No Corner Mistakes Flagged</b><p>Per-corner braking and throttle coaching appears once corner telemetry and flying laps are recorded for ${esc(E.car.session.trackName)}.</p></div>`;
+  put('reBody',engTab==='recommendations'?recHtml+cornerSection
+    :engTab==='corners'?cornersTabHtml
     :`<div class="re-sheet">${SHEET.map(([t,range,rows])=>`<div class="re-grp"><h5><span>${t}</span>${range?`<span class="rng">${range}</span>`:''}</h5>${rows.map(([k,l,u])=>`<div class="re-kv"><span>${l}:</span><b>${esc(tgt[k])}${u}</b></div>`).join('')}</div>`).join('')}</div>`);
 }
 
